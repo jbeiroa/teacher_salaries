@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "salary-dashboard"
+version = "0.1.0"
+description = "Dashboard for teacher salary analysis in Argentina"
+authors = ["Juan Ignacio Beiroa"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "salary_dashboard"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+dash = "^2.14"
+dash-bootstrap-components = "^1.5"
+dash-ag-grid = "^31.0"
+pandas = "^2.0"
+numpy = "^1.26"
+openpyxl = "^3.1.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
