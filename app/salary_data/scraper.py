@@ -13,7 +13,7 @@ class Scraper():
         base_ipc_url = 'https://www.indec.gob.ar/ftp/cuadros/economia/sh_ipc_'
         month = f'{datetime.today().month:02d}'
         year = f'{datetime.today().year}'[-2:]
-        self.URL_IPC = base_url + month + '_' + year + '.xls'
+        self.URL_IPC = base_ipc_url + month + '_' + year + '.xls'
 
     def replace_with_underscore(self, match):
         return '_' if match.group() in [' ', ', ', ' y '] else ''
