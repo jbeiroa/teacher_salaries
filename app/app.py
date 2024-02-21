@@ -10,6 +10,7 @@ df = scraper.get_cgecse_salaries(scraper.URL_TESTIGO_NETO)
 # Initialize the app - incorporate css
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = Dash(__name__, external_stylesheets=external_stylesheets)
+server = app.server
 
 # App layout
 app.layout = html.Div([
@@ -43,4 +44,4 @@ def update_graph(col_chosen):
     return fig
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True)
+    app.run(host='0.0.0.0', debug=False)

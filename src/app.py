@@ -10,6 +10,7 @@ df = scraper.get_cgecse_salaries(scraper.URL_TESTIGO_NETO)
 # Initialize the app - incorporate css
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = Dash(__name__, external_stylesheets=external_stylesheets)
+server = app.server
 
 # App layout
 app.layout = html.Div([
