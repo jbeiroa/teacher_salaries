@@ -1,3 +1,11 @@
+"""
+Module for scraping and processing Argentine teacher salary and economic data.
+
+This module provides the Scraper class, which handles data retrieval from various 
+government sources, including teacher salaries, inflation (IPC), and poverty lines 
+(CBA/CBT).
+"""
+
 import pandas as pd
 import numpy as np
 import requests as req
@@ -6,20 +14,30 @@ from datetime import datetime
 from io import BytesIO
 
 
-
 class Scraper():
+    """A class to scrape and process Argentine teacher salary and economic data.
+
+    This class handles downloading Excel and CSV files from government portals,
+    cleaning the data, and formatting it into Pandas DataFrames for analysis.
+
+    Attributes:
+        URL_TESTIGO_BRUTO (str): URL for gross witness salary data.
+        URL_TESTIGO_NETO (str): URL for net witness salary data.
+        URL_BASICO (str): URL for basic salary data.
+        URL_REMUNERATIVOS (str): URL for remunerative components data.
+        URL_SUMAS_ADICIONALES (str): URL for additional sums data.
+        URL_IPC (str): Dynamically constructed URL for INDEC inflation data.
+        URL_CBA_CBT (str): URL for CBA and CBT data from datos.gob.ar.
     """
-    A class to scrape and process teacher salary, inflation (IPC), and 
-    poverty line (CBA/CBT) data from Argentine government sources.
-    """
+
     def __init__(self):
+        """Initializes the Scraper with default URLs and constructs the IPC URL."""
         self.URL_TESTIGO_BRUTO = "https://www.argentina.gob.ar/sites/default/files/2022/07/1._salario_bruto_mg10_25.xlsx"
         self.URL_TESTIGO_NETO = "https://www.argentina.gob.ar/sites/default/files/2022/07/2._salario_de_bolsillo_mg10_25.xlsx"
         self.URL_BASICO = "https://www.argentina.gob.ar/sites/default/files/2022/07/3._sueldo_basico_25.xlsx"
         self.URL_REMUNERATIVOS = "https://www.argentina.gob.ar/sites/default/files/2022/07/4._porcentaje_de_componentes_remunerativos_sobre_el_salario_bruto_provincial_del_mg10_25.xlsx"
         self.URL_SUMAS_ADICIONALES = "https://www.argentina.gob.ar/sites/default/files/2022/07/5._sumas_adicionales_25.xlsx"
         
-        # IPC URL construction
         # IPC URL construction
         base_ipc_url = 'https://www.indec.gob.ar/ftp/cuadros/economia/sh_ipc_'
         month = f'{datetime.today().month:02d}'
@@ -30,18 +48,28 @@ class Scraper():
         self.URL_CBA_CBT = 'https://infra.datos.gob.ar/catalog/sspm/dataset/150/distribution/150.1/download/valores-canasta-basica-alimentos-canasta-basica-total-mensual-2016.csv'
 
     def _replace_with_underscore(self, match):
-        """Helper to sanitize column names."""
+        """Helper to sanitize column names.
+
+        Args:
+            match (re.Match): A regex match object.
+
+        Returns:
+            str: An underscore if the match is a separator, otherwise an empty string.
+        """
         return '_' if match.group() in [' ', ', ', ' y '] else ''
 
     def get_cgecse_salaries(self, url):
-        """
-        Scrapes and cleans teacher salary data from CGECSE Excel files.
+        """Scrapes and cleans teacher salary data from CGECSE Excel files.
+
+        Processes the Excel file from the given URL, handles quarterly column 
+        transformation to datetime, cleans province names, and removes footnotes.
 
         Args:
             url (str): The URL of the CGECSE Excel file.
 
         Returns:
             pd.DataFrame: A DataFrame with dates as index and provinces as columns.
+                The values are cast to 'float32'.
         """
         r = req.get(url, timeout=10)
         df = pd.read_excel(BytesIO(r.content), header=6)
@@ -76,10 +104,14 @@ class Scraper():
         return df.astype('float32') #convert to numeric
     
     def get_ipc_indec(self):
-        """Retrieves inflation data from INDEC
+        """Retrieves inflation data from INDEC.
+
+        Fetches the IPC (Consumer Price Index) from the INDEC portal, cleans 
+        column names, and prefixes them with 'infl_'.
 
         Returns:
-            df: Pandas dataframe with inflation data by category
+            pd.DataFrame: A DataFrame with inflation indices by category.
+                The index is the date and columns are prefixed with 'infl_'.
         """        
         r = req.get(self.URL_IPC, timeout=10)
         df = pd.read_excel(BytesIO(r.content), 
@@ -90,6 +122,7 @@ class Scraper():
         df = df.T
         df.columns = df.iloc[0]
         df.drop(df.index[0], inplace=True)
+        df.index = pd.to_datetime(df.index)
         new_col_names = df.columns.str.replace(r'[\s,y]+', self._replace_with_underscore, regex=True)
         col_names = dict(zip(df.columns, new_col_names))
         df.rename(col_names, axis=1, inplace=True)
@@ -97,11 +130,13 @@ class Scraper():
         return df.add_prefix('infl_', axis=1).astype('float32')
 
     def get_cba_cbt(self):
-        """
-        Fetches CBA (Indigency Line) and CBT (Poverty Line) data from datos.gob.ar.
+        """Fetches CBA (Indigency Line) and CBT (Poverty Line) data from datos.gob.ar.
+
+        Retrieves monthly values for the Basic Food Basket (CBA) and Total Basic 
+        Basket (CBT) for the GBA region.
 
         Returns:
-            pd.DataFrame: A DataFrame with 'indice_tiempo', 'cba', and 'cbt'.
+            pd.DataFrame: A DataFrame with 'indice_tiempo' as index, 'cba', and 'cbt'.
         """
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
         r = req.get(self.URL_CBA_CBT, headers=headers, timeout=10)
@@ -111,13 +146,17 @@ class Scraper():
         return df
 
     def calculate_real_salary(self, df_nominal, df_ipc, base_date=None):
-        """
-        Calculates inflation-adjusted (real) salaries.
+        """Calculates inflation-adjusted (real) salaries.
+
+        Adjusts nominal salary values using a price index (IPC) to a specific 
+        base date.
 
         Args:
             df_nominal (pd.DataFrame): Nominal salary DataFrame.
-            df_ipc (pd.Series/pd.DataFrame): IPC index Series or DataFrame with 'Nivel_general'.
-            base_date (str/datetime): The date to use as base (100). If None, uses the last available date.
+            df_ipc (pd.Series or pd.DataFrame): IPC index Series or DataFrame 
+                containing 'infl_Nivel_general'.
+            base_date (str or datetime, optional): The date to use as base (value=100). 
+                If None, uses the last available date in the IPC series.
 
         Returns:
             pd.DataFrame: Real salary DataFrame.
@@ -139,14 +178,16 @@ class Scraper():
         return df_real.dropna()
 
     def calculate_variations(self, series):
-        """
-        Calculates quarterly, annual (accumulated), and inter-annual variations.
+        """Calculates quarterly, annual (accumulated), and inter-annual variations.
+
+        Computes percentage changes for different time horizons from a given series.
 
         Args:
             series (pd.Series): A time series of values.
 
         Returns:
-            pd.DataFrame: A DataFrame with 'quarterly', 'annual_acc', and 'interannual' variations.
+            pd.DataFrame: A DataFrame with 'quarterly', 'annual_acc', and 
+                'interannual' variation columns.
         """
         df_var = pd.DataFrame(index=series.index)
         df_var['quarterly'] = series.pct_change(periods=1) * 100
