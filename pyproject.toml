@@ -5,6 +5,7 @@ description = "Dashboard for teacher salary analysis in Argentina"
 authors = ["Juan Ignacio Beiroa"]
 license = "MIT"
 readme = "README.md"
+package-mode = false
 packages = [{include = "salary_dashboard"}]
 
 [tool.poetry.dependencies]
@@ -16,8 +17,17 @@ pandas = "^2.0"
 numpy = "^1.26"
 openpyxl = "^3.1.2"
 gunicorn = "^21.2.0"
+jupyter = "^1.1.1"
+xlrd = "^2.0.1"
+beautifulsoup4 = "^4.12.3"
 
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "pytest (>=9.0.2,<10.0.0)",
+    "pytest-mock (>=3.15.1,<4.0.0)"
+]
