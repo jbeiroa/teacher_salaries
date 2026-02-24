@@ -1,14 +1,14 @@
 # Teacher Salaries Dashboard - Argentina
 
-An interactive web application built with **Dash** to visualize and analyze teacher salary data across different provinces in Argentina, with context provided by inflation (IPC) and poverty line (CBT) data.
+An interactive web application built with **Dash** to visualize and analyze teacher salary data (category MG10) across Argentina, featuring dynamic inflation adjustment and provincial benchmarking.
 
-## Features
+## Key Features
 
-- **Interactive Province Selection:** Analyze salary trends for any specific province.
-- **Salary Type Comparison:** Switch between Net, Gross, and Basic salary views.
-- **Historical Trend Analysis:** View nominal vs. inflation-adjusted (real) salaries over time.
-- **National Comparison:** Compare latest salary data across all provinces.
-- **Key Metrics:** Real-time display of latest salaries and annual variations.
+- **MG10 Benchmark:** Analyzes data for the "Maestro de Grado" position with 10 years of seniority.
+- **Advanced Inflation Adjustment:** Select specific inflation categories (Food, Housing, etc.) and a custom **Base Date** for real salary calculations.
+- **Reference Lines:** Overlay Poverty and Indigency lines (CBA/CBT) for both individual adults and standard families.
+- **Bilingual Support:** Full interface available in **Spanish** (default) and **English**.
+- **Interactive Visualizations:** Historical trends (Nominal vs. Real) and ranked provincial comparisons for any chosen month.
 
 ## Quick Start
 
@@ -33,7 +33,8 @@ Access the dashboard at `http://127.0.0.1:8050`.
 ### Running Tests
 Execute the test suite with:
 ```bash
-PYTHONPATH=src poetry run pytest
+export PYTHONPATH=$PYTHONPATH:$(pwd)/src
+poetry run pytest
 ```
 
 ## Project Structure
@@ -46,7 +47,7 @@ PYTHONPATH=src poetry run pytest
 ## Data Sources
 - **Salaries:** CGECSE (Ministerio de Educación).
 - **Inflation:** INDEC (Instituto Nacional de Estadística y Censos).
-- **Poverty Line:** datos.gob.ar (Optional/Temporarily Disabled).
+- **Poverty Lines:** datos.gob.ar.
 
 ## License
 MIT

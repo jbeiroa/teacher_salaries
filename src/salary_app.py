@@ -19,11 +19,6 @@ df_basic_salary = scraper.get_cgecse_salaries(scraper.URL_BASICO).loc[START_LIMI
 df_ipc = scraper.get_ipc_indec().loc[START_LIMIT:]
 
 df_cba_cbt = scraper.get_cba_cbt().loc[START_LIMIT:]
-if not df_cba_cbt.empty:
-    df_cba_cbt.rename(columns={
-        'canasta_basica_total': 'cbt',
-        'canasta_basica_alimentaria': 'cba'
-    }, inplace=True)
 
 # --- Translations ---
 TRANSLATIONS = {
@@ -33,6 +28,7 @@ TRANSLATIONS = {
         'province': "Provincia:",
         'salary_type': "Tipo de Salario:",
         'adjustment': "Ajuste:",
+        'ref_line': "Línea de Referencia:",
         'inf_cat': "Categoría de Inflación:",
         'base_date': "Fecha Base (Ajuste Inflación):",
         'date_range': "Rango de Fechas Histórico:",
@@ -41,7 +37,7 @@ TRANSLATIONS = {
         'basic': "Básico",
         'nominal': "Mostrar Nominal",
         'real': "Mostrar Real (Ajustado)",
-        'cbt': "Mostrar Línea de Pobreza (CBT)",
+        'cbt': "Mostrar Línea de Ref.",
         'hist_trend': "Tendencia Histórica",
         'prov_comp': "Comparación Provincial",
         'latest': "Último",
@@ -52,7 +48,6 @@ TRANSLATIONS = {
         'comp_header_prefix': "Comparación Provincial",
         'xaxis_salary': "Monto Salarial ($)",
         'nom_trace': "Nominal",
-        'cbt_trace': "Línea de Pobreza (CBT)",
         'instr_btn': "Instrucciones",
         'instr_title': "Acerca de este Tablero",
         'instr_body': [
@@ -61,7 +56,11 @@ TRANSLATIONS = {
             " e ",
             html.A("INDEC", href="https://www.indec.gob.ar/", target="_blank"),
             "."
-        ]
+        ],
+        'cba_adult': "CBA (Adulto Equivalente)",
+        'cbt_adult': "CBT (Adulto Equivalente)",
+        'indigency_fam': "Línea Indigencia (Familia)",
+        'poverty_fam': "Línea Pobreza (Familia)"
     },
     'en': {
         'title': "Teacher Salaries Dashboard - Argentina",
@@ -69,6 +68,7 @@ TRANSLATIONS = {
         'province': "Province:",
         'salary_type': "Salary Type:",
         'adjustment': "Adjustment:",
+        'ref_line': "Reference Line:",
         'inf_cat': "Inflation Category:",
         'base_date': "Base Date (Inflation Adj.):",
         'date_range': "Historical Date Range:",
@@ -77,7 +77,7 @@ TRANSLATIONS = {
         'basic': "Basic",
         'nominal': "Show Nominal",
         'real': "Show Real (Adjusted)",
-        'cbt': "Show Poverty Line (CBT)",
+        'cbt': "Show Ref. Line",
         'hist_trend': "Historical Trend",
         'prov_comp': "Provincial Comparison",
         'latest': "Latest",
@@ -88,7 +88,6 @@ TRANSLATIONS = {
         'comp_header_prefix': "Provincial Comparison",
         'xaxis_salary': "Salary Amount ($)",
         'nom_trace': "Nominal",
-        'cbt_trace': "Poverty Line (CBT)",
         'instr_btn': "Instructions",
         'instr_title': "About this Dashboard",
         'instr_body': [
@@ -97,7 +96,11 @@ TRANSLATIONS = {
             " and ",
             html.A("INDEC", href="https://www.indec.gob.ar/", target="_blank"),
             "."
-        ]
+        ],
+        'cba_adult': "CBA (Adult Equivalent)",
+        'cbt_adult': "CBT (Adult Equivalent)",
+        'indigency_fam': "Indigency Line (Family)",
+        'poverty_fam': "Poverty Line (Family)"
     }
 }
 
@@ -200,6 +203,14 @@ app.layout = dbc.Container([
                         options=[], # Loaded via callback
                         value=['nominal', 'real'],
                         switch=True,
+                        className="mb-3"
+                    ),
+                    html.Label(id='label-ref-line'),
+                    dcc.Dropdown(
+                        id='ref-line-dropdown',
+                        options=[], # Loaded via callback
+                        value='linea_pobreza',
+                        clearable=False,
                         className="mb-3"
                     ),
                     html.Label(id='label-infl-cat'),
@@ -305,12 +316,14 @@ def toggle_language(btn_es, btn_en):
     Output('label-province', 'children'),
     Output('label-salary-type', 'children'),
     Output('label-adjustment', 'children'),
+    Output('label-ref-line', 'children'),
     Output('label-infl-cat', 'children'),
     Output('label-base-date', 'children'),
     Output('label-date-range', 'children'),
     Output('trend-header', 'children'),
     Output('salary-type-radio', 'options'),
     Output('adjustment-toggle', 'options'),
+    Output('ref-line-dropdown', 'options'),
     Output('offcanvas-usage', 'title'),
     Output('offcanvas-usage', 'children'),
     Output('open-offcanvas', 'children'),
@@ -328,11 +341,17 @@ def update_ui_language(lang):
         {'label': ' ' + t['real'], 'value': 'real'},
         {'label': ' ' + t['cbt'], 'value': 'cbt'},
     ]
+    ref_options = [
+        {'label': t['cba_adult'], 'value': 'canasta_basica_alimentaria'},
+        {'label': t['cbt_adult'], 'value': 'canasta_basica_total'},
+        {'label': t['indigency_fam'], 'value': 'linea_indigencia'},
+        {'label': t['poverty_fam'], 'value': 'linea_pobreza'},
+    ]
     return (
         t['title'], t['filters'], t['province'], t['salary_type'], 
-        t['adjustment'], t['inf_cat'], t['base_date'], t['date_range'],
-        t['hist_trend'], salary_options, adj_options, t['instr_title'], 
-        t['instr_body'], "?"
+        t['adjustment'], t['ref_line'], t['inf_cat'], t['base_date'], 
+        t['date_range'], t['hist_trend'], salary_options, adj_options, 
+        ref_options, t['instr_title'], t['instr_body'], "?"
     )
 
 @app.callback(
@@ -346,6 +365,7 @@ def update_ui_language(lang):
     Input('province-dropdown', 'value'),
     Input('salary-type-radio', 'value'),
     Input('adjustment-toggle', 'value'),
+    Input('ref-line-dropdown', 'value'),
     Input('inflation-category-dropdown', 'value'),
     Input('base-date-dropdown', 'value'),
     Input('date-picker-range', 'start_date'),
@@ -353,7 +373,7 @@ def update_ui_language(lang):
     Input('comparison-month-dropdown', 'value'),
     Input('lang-store', 'data')
 )
-def update_dashboard(selected_province, salary_type, adjustments, infl_cat, base_date, start_date, end_date, comp_month_idx, lang):
+def update_dashboard(selected_province, salary_type, adjustments, ref_line_col, infl_cat, base_date, start_date, end_date, comp_month_idx, lang):
     t = TRANSLATIONS[lang]
     
     # Data selection
@@ -400,10 +420,19 @@ def update_dashboard(selected_province, salary_type, adjustments, infl_cat, base
         ))
         
     if 'cbt' in adjustments and not df_cba_cbt.empty:
-        cbt_filtered = df_cba_cbt['cbt'].reindex(df_nom.index, method='ffill').loc[start_date:end_date]
+        # Determine display name from TRANSLATIONS mapping
+        col_to_key = {
+            'canasta_basica_alimentaria': 'cba_adult',
+            'canasta_basica_total': 'cbt_adult',
+            'linea_indigencia': 'indigency_fam',
+            'linea_pobreza': 'poverty_fam'
+        }
+        ref_trace_name = t[col_to_key[ref_line_col]]
+        
+        cbt_filtered = df_cba_cbt[ref_line_col].reindex(df_nom.index, method='ffill').loc[start_date:end_date]
         fig_hist.add_trace(go.Scatter(
             x=cbt_filtered.index, y=cbt_filtered,
-            name=t['cbt_trace'], line=dict(color='#e74c3c', dash='dash')
+            name=ref_trace_name, line=dict(color='#e74c3c', dash='dash')
         ))
 
     fig_hist.update_layout(
