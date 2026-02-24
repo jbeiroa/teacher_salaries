@@ -4,23 +4,20 @@ import plotly.express as px
 from salary_data.scraper import Scraper
 from datetime import datetime
 
-# Initialize the scraper
+# --- Data Loading ---
 scraper = Scraper()
 
-# --- Fetch Data ---
-# Teacher Salaries (Net, Gross, Basic, Remunerative Share)
 df_net_salary = scraper.get_cgecse_salaries(scraper.URL_TESTIGO_NETO)
 df_gross_salary = scraper.get_cgecse_salaries(scraper.URL_TESTIGO_BRUTO)
 df_basic_salary = scraper.get_cgecse_salaries(scraper.URL_BASICO)
 df_remunerative_share = scraper.get_cgecse_salaries(scraper.URL_REMUNERATIVOS)
 
-# IPC data (inflation)
-df_ipc = scraper.get_ipc_indec()
-ipc_national = df_ipc['Nivel_general']
 
-# CBA/CBT data (poverty lines) - Temporarily disabled due to HTTP Error 403
-# df_cba_cbt = scraper.get_cba_cbt()
-df_cba_cbt = pd.DataFrame({'cbt': []}) # Provide an empty DataFrame to avoid errors
+df_ipc = scraper.get_ipc_indec()
+ipc_national = df_ipc['infl_Nivel_general']
+
+
+df_cba_cbt = scraper.get_cba_cbt()
 
 # --- Data Preparation ---
 # Calculate Real Salaries (using national IPC for simplicity across provinces)

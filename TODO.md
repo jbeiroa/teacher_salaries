@@ -1,9 +1,9 @@
 # Teacher Salaries Dashboard - TODO List
 
 ## Priority 1: Data Parsing & Cleaning
-- [ ] **Fix Salary Data Parsing:** Investigate and resolve potential decimal point/comma conversion errors (English vs. Spanish conventions) in the CGECSE Excel files.
-- [ ] **Cleanup Provincial Comparison:** Filter out non-province entries (e.g., comments, reference notes, national averages) from the salary DataFrames to ensure the bar chart only shows valid jurisdictions.
-- [ ] **Restore CBT Integration:** Resolve the `HTTP Error 403: Forbidden` issue when fetching data from `datos.gob.ar`. Explore using custom `User-Agent` headers or alternative data mirrors.
+- [✅] **Fix Salary Data Parsing:** Investigate and resolve potential decimal point/comma conversion errors (English vs. Spanish conventions) in the CGECSE Excel files.
+- [✅] **Cleanup Provincial Comparison:** Filter out non-province entries (e.g., comments, reference notes, national averages) from the salary DataFrames to ensure the bar chart only shows valid jurisdictions.
+- [✅] **Restore CBT Integration:** Resolve the `HTTP Error 403: Forbidden` issue when fetching data from `datos.gob.ar`. Explore using custom `User-Agent` headers or alternative data mirrors.
 
 ## Priority 2: UI/UX Enhancements
 - [ ] **Migrate to Bootstrap:** Transition from the current `codepen.io` CSS to `dash-bootstrap-components` for a more modern, responsive layout.
