@@ -17,7 +17,6 @@ df_gross_salary = scraper.get_cgecse_salaries(scraper.URL_TESTIGO_BRUTO).loc[STA
 df_basic_salary = scraper.get_cgecse_salaries(scraper.URL_BASICO).loc[START_LIMIT:]
 
 df_ipc = scraper.get_ipc_indec().loc[START_LIMIT:]
-ipc_national = df_ipc['infl_Nivel_general']
 
 df_cba_cbt = scraper.get_cba_cbt().loc[START_LIMIT:]
 if not df_cba_cbt.empty:
@@ -25,11 +24,6 @@ if not df_cba_cbt.empty:
         'canasta_basica_total': 'cbt',
         'canasta_basica_alimentaria': 'cba'
     }, inplace=True)
-
-# Calculate Real Salaries
-df_net_salary_real = scraper.calculate_real_salary(df_net_salary, ipc_national)
-df_gross_salary_real = scraper.calculate_real_salary(df_gross_salary, ipc_national)
-df_basic_salary_real = scraper.calculate_real_salary(df_basic_salary, ipc_national)
 
 # --- Helper Functions ---
 def create_kpi_card(title, nominal_value, real_variation=None):
@@ -121,6 +115,14 @@ app.layout = dbc.Container([
                         switch=True,
                         className="mb-3"
                     ),
+                    html.Label("Inflation Category:"),
+                    dcc.Dropdown(
+                        id='inflation-category-dropdown',
+                        options=[{'label': col.replace('infl_', '').replace('_', ' '), 'value': col} for col in df_ipc.columns],
+                        value='infl_Nivel_general',
+                        clearable=False,
+                        className="mb-3"
+                    ),
                     html.Label("Historical Date Range:"),
                     dcc.DatePickerRange(
                         id='date-picker-range',
@@ -185,18 +187,23 @@ app.layout = dbc.Container([
     Input('province-dropdown', 'value'),
     Input('salary-type-radio', 'value'),
     Input('adjustment-toggle', 'value'),
+    Input('inflation-category-dropdown', 'value'),
     Input('date-picker-range', 'start_date'),
     Input('date-picker-range', 'end_date'),
     Input('comparison-month-dropdown', 'value')
 )
-def update_dashboard(selected_province, salary_type, adjustments, start_date, end_date, comp_month_idx):
+def update_dashboard(selected_province, salary_type, adjustments, infl_cat, start_date, end_date, comp_month_idx):
     # Data selection
     if salary_type == 'net':
-        df_nom, df_real = df_net_salary, df_net_salary_real
+        df_nom = df_net_salary
     elif salary_type == 'gross':
-        df_nom, df_real = df_gross_salary, df_gross_salary_real
+        df_nom = df_gross_salary
     else:
-        df_nom, df_real = df_basic_salary, df_basic_salary_real
+        df_nom = df_basic_salary
+
+    # Dynamic real salary calculation based on selected inflation category
+    ipc_series = df_ipc[infl_cat]
+    df_real = scraper.calculate_real_salary(df_nom, ipc_series)
 
     # Date filtering
     mask = (df_nom.index >= start_date) & (df_nom.index <= end_date)
@@ -222,9 +229,10 @@ def update_dashboard(selected_province, salary_type, adjustments, start_date, en
         ))
     
     if 'real' in adjustments:
+        cat_name = infl_cat.replace('infl_', '').replace('_', ' ')
         fig_hist.add_trace(go.Scatter(
             x=df_real_filt.index, y=df_real_filt[selected_province],
-            name="Real (Adj.)", line=dict(color='#18bc9c', width=3)
+            name=f"Real ({cat_name})", line=dict(color='#18bc9c', width=3)
         ))
         
     if 'cbt' in adjustments and not df_cba_cbt.empty:

@@ -171,11 +171,13 @@ class Scraper():
         
         base_value = ipc_series.loc[base_date]
         
-        # Reindex IPC to match salary dates (usually quarterly)
-        ipc_reindexed = ipc_series.reindex(df_nominal.index, method='ffill')
+        # Align IPC to salary dates
+        common_index = df_nominal.index.intersection(ipc_series.index)
+        df_nom_aligned = df_nominal.loc[common_index]
+        ipc_aligned = ipc_series.loc[common_index]
         
-        df_real = df_nominal.divide(ipc_reindexed, axis=0) * base_value
-        return df_real.dropna()
+        df_real = df_nom_aligned.divide(ipc_aligned, axis=0) * base_value
+        return df_real
 
     def calculate_variations(self, series):
         """Calculates quarterly, annual (accumulated), and inter-annual variations.
