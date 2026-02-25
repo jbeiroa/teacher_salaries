@@ -4,10 +4,32 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from salary_data.scraper import Scraper
+from salary_data.analytics import AnalyticsPipeline
 from datetime import datetime
+import os
+import re
 
 # --- Data Loading ---
 scraper = Scraper()
+
+# Load analytics artifacts
+pipeline = AnalyticsPipeline()
+df_clusters, df_anomalies = pipeline.load_latest_artifacts()
+HAS_ANALYTICS = df_clusters is not None
+
+# Load and Parse Report
+REPORT_PATH = "reports/cluster_analysis_report.md"
+REPORT_SECTIONS = {"intro": "", "clusters": [], "synthesis": ""}
+if os.path.exists(REPORT_PATH):
+    with open(REPORT_PATH, "r") as f:
+        content = f.read()
+        # Use regex to split by horizontal rule on its own line to avoid breaking tables
+        parts = re.split(r'\n---\n', content)
+        if len(parts) >= 8:
+            REPORT_SECTIONS["intro"] = parts[0].strip()
+            # Parts 1 to 6 are the clusters
+            REPORT_SECTIONS["clusters"] = [p.strip() for p in parts[1:7]]
+            REPORT_SECTIONS["synthesis"] = parts[7].strip()
 
 # Pre-load and align data to start from Dec 2016 (INDEC IPC start)
 START_LIMIT = '2016-12-01'
@@ -38,7 +60,9 @@ TRANSLATIONS = {
         'nominal': "Mostrar Nominal",
         'real': "Mostrar Real (Ajustado)",
         'cbt': "Mostrar Línea de Ref.",
-        'hist_trend': "Tendencia Histórica",
+        'hist_trend': "Tendencia Histórica (salarios en AR$)",
+        'hist_trend_base100': "Tendencia Histórica (Base 100 Índice)",
+        'base100_toggle': "Mostrar como Índice (Base 100)",
         'prov_comp': "Comparación Provincial",
         'latest': "Último",
         'q_var': "Var. Trimestral",
@@ -47,20 +71,37 @@ TRANSLATIONS = {
         'real_var_prefix': "Var. Real:",
         'comp_header_prefix': "Comparación Provincial",
         'xaxis_salary': "Monto Salarial ($)",
+        'xaxis_index': "Índice (Base 100)",
         'nom_trace': "Nominal",
         'instr_btn': "Instrucciones",
         'instr_title': "Acerca de este Tablero",
         'instr_body': [
-            "Este tablero muestra datos para el cargo de Maestro de Grado con 10 años de antigüedad (MG10), una categoría de referencia para las negociaciones salariales en Argentina. Los datos son recolectados de la ",
-            html.A("CGECSE", href="https://www.argentina.gob.ar/educacion/evaluacion-e-informacion-educativa/cgecse", target="_blank"),
-            " e ",
-            html.A("INDEC", href="https://www.indec.gob.ar/", target="_blank"),
-            "."
+            html.P("Este tablero permite analizar la evolución del poder adquisitivo de los docentes en Argentina."),
+            html.B("Filtros Principales:"),
+            html.Ul([
+                html.Li("Provincia y Tipo de Salario: Seleccione la jurisdicción y si desea ver el Neto (bolsillo), Bruto o Básico."),
+                html.Li("Mostrar Real: Activa el ajuste por inflación. Si está desactivado, verá valores nominales."),
+                html.Li("Mostrar Línea de Ref: Muestra canastas básicas (CBA/CBT) o líneas de pobreza/indigencia para comparar el salario frente al costo de vida."),
+                html.Li("Mostrar como Índice: Transforma los gráficos en porcentaje de crecimiento relativo a la 'Fecha Base' seleccionada. Útil para comparar quién ganó o perdió más desde un momento específico."),
+            ]),
+            html.B("Analítica y Anomalías:"),
+            html.Ul([
+                html.Li("Icono ⚠️: Indica una caída anómala en el salario real (pérdida brusca de poder adquisitivo)."),
+                html.Li("Icono ✨: Indica un aumento anómalo (generalmente bonos extraordinarios o retroactivos)."),
+                html.Li("Pestaña Analítica Avanzada: Muestra grupos de provincias (Clusters) con comportamientos similares identificados mediante Machine Learning."),
+            ])
         ],
         'cba_adult': "CBA (Adulto Equivalente)",
         'cbt_adult': "CBT (Adulto Equivalente)",
         'indigency_fam': "Línea Indigencia (Familia)",
-        'poverty_fam': "Línea Pobreza (Familia)"
+        'poverty_fam': "Línea Pobreza (Familia)",
+        'tab_general': "Tablero Principal",
+        'tab_analytics': "Analítica Avanzada",
+        'analytics_cluster_title': "Análisis de Clusters (Comportamiento Salarial)",
+        'analytics_cluster_desc': "Las provincias han sido agrupadas por un modelo de Machine Learning (K-Shape) según cómo sus salarios reales reaccionan a lo largo del tiempo frente a la inflación y las políticas locales.",
+        'cluster_label': "Cluster",
+        'no_analytics': "Datos analíticos no disponibles. Ejecute el pipeline de entrenamiento.",
+        'ipc_label': "IPC"
     },
     'en': {
         'title': "Teacher Salaries Dashboard - Argentina",
@@ -78,64 +119,120 @@ TRANSLATIONS = {
         'nominal': "Show Nominal",
         'real': "Show Real (Adjusted)",
         'cbt': "Show Ref. Line",
-        'hist_trend': "Historical Trend",
+        'hist_trend': "Historical Trend (salaries in AR$)",
+        'hist_trend_base100': "Historical Trend (Base 100 Index)",
+        'base100_toggle': "Show as Index (Base 100)",
         'prov_comp': "Provincial Comparison",
         'latest': "Latest",
-        'q_var': "Quarterly Var.",
-        'a_var': "Annual Acc.",
-        'i_var': "Inter-annual Var.",
-        'real_var_prefix': "Real Var:",
+        'q_var': "Var. Trimestral",
+        'a_var': "Acum. Anual",
+        'i_var': "Var. Interanual",
+        'real_var_prefix': "Var. Real:",
         'comp_header_prefix': "Provincial Comparison",
         'xaxis_salary': "Salary Amount ($)",
+        'xaxis_index': "Index (Base 100)",
         'nom_trace': "Nominal",
         'instr_btn': "Instructions",
         'instr_title': "About this Dashboard",
         'instr_body': [
-            "This dashboard displays data for the 'Maestro de Grado' (Primary School Teacher) position with 10 years of seniority (MG10), a benchmark category for salary negotiations in Argentina. Data is sourced from ",
-            html.A("CGECSE", href="https://www.argentina.gob.ar/educacion/evaluacion-e-informacion-educativa/cgecse", target="_blank"),
-            " and ",
-            html.A("INDEC", href="https://www.indec.gob.ar/", target="_blank"),
-            "."
+            html.P("This dashboard analyzes the evolution of teacher purchasing power in Argentina."),
+            html.B("Main Filters:"),
+            html.Ul([
+                html.Li("Province & Salary Type: Select the jurisdiction and whether to see Net (take-home), Gross, or Basic salary."),
+                html.Li("Show Real: Enables inflation adjustment. If off, you see nominal values."),
+                html.Li("Show Ref. Line: Displays basic baskets (CBA/CBT) or poverty/indigency lines to compare salary against cost of living."),
+                html.Li("Show as Index: Transforms charts into percentage growth relative to the selected 'Base Date'. Useful for comparing relative gains or losses from a specific point in time."),
+            ]),
+            html.B("Analytics & Anomalies:"),
+            html.Ul([
+                html.Li("⚠️ Icon: Indicates an anomalous drop in real salary (sharp loss of purchasing power)."),
+                html.Li("✨ Icon: Indicates an anomalous increase (usually extraordinary bonuses or back-pay)."),
+                html.Li("Advanced Analytics Tab: Displays groups of provinces (Clusters) with similar behaviors identified through Machine Learning."),
+            ])
         ],
         'cba_adult': "CBA (Adult Equivalent)",
         'cbt_adult': "CBT (Adult Equivalent)",
         'indigency_fam': "Indigency Line (Family)",
-        'poverty_fam': "Poverty Line (Family)"
+        'poverty_fam': "Poverty Line (Family)",
+        'tab_general': "Main Dashboard",
+        'tab_analytics': "Advanced Analytics",
+        'analytics_cluster_title': "Cluster Analysis (Salary Behavior)",
+        'analytics_cluster_desc': "Provinces have been grouped by a Machine Learning model (K-Shape) based on how their real salaries react over time to inflation and local policies.",
+        'cluster_label': "Cluster",
+        'no_analytics': "Analytics data not available. Please run the training pipeline.",
+        'ipc_label': "CPI"
     }
 }
 
 # --- Helper Functions ---
-def create_kpi_card(title, nominal_value, real_variation=None, lang='es'):
-    """Creates a Bootstrap card showing nominal value and real variation subtext."""
-    color = "text-dark"
-    var_text = ""
-    prefix = TRANSLATIONS[lang]['real_var_prefix']
+def format_localized(value, lang='es', decimals=0):
+    """Formats a number according to the language's locale (thousands and decimal separators)."""
+    if value is None or pd.isna(value):
+        return "-"
     
-    if real_variation is not None:
-        color = "text-success" if real_variation >= 0 else "text-danger"
-        var_text = f"{prefix} {real_variation:+.1f}%"
+    # Standard python formatting first
+    try:
+        if decimals == 0:
+            formatted = f"{int(round(value)):,}"
+        else:
+            formatted = f"{value:,.{decimals}f}"
+    except (ValueError, OverflowError):
+        return "-"
+        
+    if lang == 'es':
+        # Swap , and . for Spanish
+        return formatted.replace(',', 'X').replace('.', ',').replace('X', '.')
+    return formatted
+
+def create_kpi_card(title, nominal_value, nom_variation=None, ipc_variation=None, real_variation=None, lang='es'):
+    """Creates a Bootstrap card showing nominal value, nominal variation vs inflation, and real variation."""
+    color_real = "text-dark"
+    var_real_text = "\u00A0" # Use non-breaking space to preserve layout
+    prefix_real = TRANSLATIONS[lang]['real_var_prefix']
+    
+    # 1. Real Variation Subtext
+    if real_variation is not None and not pd.isna(real_variation):
+        color_real = "text-success" if real_variation >= 0 else "text-danger"
+        var_real_val = format_localized(real_variation, lang=lang, decimals=1)
+        var_real_text = f"{prefix_real} {var_real_val}%"
+
+    # 2. Nominal vs Inflation Subtext
+    var_comp_text = "\u00A0" # Use non-breaking space
+    if nom_variation is not None and not pd.isna(nom_variation) and ipc_variation is not None:
+        nom_fmt = format_localized(nom_variation, lang=lang, decimals=1)
+        ipc_fmt = format_localized(ipc_variation, lang=lang, decimals=1)
+        ipc_lbl = TRANSLATIONS[lang]['ipc_label']
+        var_comp_text = f"Nom: {nom_fmt}% | {ipc_lbl}: {ipc_fmt}%"
 
     return dbc.Card(
         dbc.CardBody([
-            html.H6(title, className="card-subtitle text-muted mb-2"),
-            html.H4(nominal_value, className="card-title text-dark"),
-            html.Small(var_text, className=f"{color} fw-bold")
-        ]),
-        className="shadow-sm mb-4"
+            html.H6(title, className="card-subtitle text-muted mb-1 text-center", style={'fontSize': '0.85rem'}),
+            html.H4(nominal_value, className="card-title text-dark mb-1 text-center", style={'fontSize': '1.8rem', 'fontWeight': 'bold'}),
+            html.Div([
+                html.Small(var_comp_text, className="text-muted d-block text-center", style={'fontSize': '0.75rem', 'minHeight': '1rem'}),
+                html.Small(var_real_text, className=f"{color_real} fw-bold d-block text-center", style={'fontSize': '0.85rem', 'minHeight': '1.2rem'})
+            ])
+        ], className="d-flex flex-column justify-content-center p-3"),
+        className="shadow-sm h-100" # Ensure cards in a row have same height
     )
 
-def get_variation_metrics(nom_series, real_series):
-    """Calculates variation metrics for both nominal and real series."""
-    if nom_series.empty or real_series.empty:
+def get_variation_metrics(nom_series, real_series, ipc_series):
+    """Calculates variation metrics for nominal, real, and inflation series."""
+    if nom_series.empty or real_series.empty or ipc_series.empty:
         return {
             "latest_nom": 0, 
             "q_nom": 0, "a_nom": 0, "i_nom": 0,
-            "q_real": 0, "a_real": 0, "i_real": 0
+            "q_real": 0, "a_real": 0, "i_real": 0,
+            "q_ipc": 0, "a_ipc": 0, "i_ipc": 0
         }
     
-    # We calculate variations on the full series but report the latest
+    # CRITICAL FIX: Align IPC to the same frequency as salaries (Quarterly)
+    # This ensures "Quarterly" for IPC is also 3 months, matching salaries.
+    ipc_aligned = ipc_series.reindex(nom_series.index, method='ffill')
+    
     v_nom = scraper.calculate_variations(nom_series)
     v_real = scraper.calculate_variations(real_series)
+    v_ipc = scraper.calculate_variations(ipc_aligned)
     
     return {
         "latest_nom": nom_series.iloc[-1],
@@ -144,7 +241,10 @@ def get_variation_metrics(nom_series, real_series):
         "i_nom": v_nom['interannual'].iloc[-1] if not v_nom.empty else 0,
         "q_real": v_real['quarterly'].iloc[-1] if not v_real.empty else 0,
         "a_real": v_real['annual_acc'].iloc[-1] if not v_real.empty else 0,
-        "i_real": v_real['interannual'].iloc[-1] if not v_real.empty else 0
+        "i_real": v_real['interannual'].iloc[-1] if not v_real.empty else 0,
+        "q_ipc": v_ipc['quarterly'].iloc[-1] if not v_ipc.empty else 0,
+        "a_ipc": v_ipc['annual_acc'].iloc[-1] if not v_ipc.empty else 0,
+        "i_ipc": v_ipc['interannual'].iloc[-1] if not v_ipc.empty else 0,
     }
 
 # --- App Initialization ---
@@ -201,7 +301,7 @@ app.layout = dbc.Container([
                     dbc.Checklist(
                         id='adjustment-toggle',
                         options=[], # Loaded via callback
-                        value=['nominal', 'real'],
+                        value=['real', 'cbt'],
                         switch=True,
                         className="mb-3"
                     ),
@@ -225,7 +325,7 @@ app.layout = dbc.Container([
                     dcc.Dropdown(
                         id='base-date-dropdown',
                         options=[{'label': d.strftime("%Y-%m"), 'value': d.strftime("%Y-%m-%d")} for d in df_ipc.index],
-                        value=df_ipc.index[-1].strftime("%Y-%m-%d"),
+                        value=df_net_salary.index[-1].strftime("%Y-%m-%d"),
                         clearable=False,
                         className="mb-3"
                     ),
@@ -245,44 +345,53 @@ app.layout = dbc.Container([
 
         # Main Content
         dbc.Col([
-            # KPIs Row
-            dbc.Row([
-                dbc.Col(id='kpi-latest', width=12, md=3),
-                dbc.Col(id='kpi-quarterly', width=12, md=3),
-                dbc.Col(id='kpi-annual', width=12, md=3),
-                dbc.Col(id='kpi-interannual', width=12, md=3),
-            ]),
+            dbc.Tabs([
+                dbc.Tab(label="Dashboard", tab_id="tab-general", id="tab-general", children=[
+                    # KPIs Row
+                    dbc.Row([
+                        dbc.Col(id='kpi-latest', width=12, md=3),
+                        dbc.Col(id='kpi-quarterly', width=12, md=3),
+                        dbc.Col(id='kpi-annual', width=12, md=3),
+                        dbc.Col(id='kpi-interannual', width=12, md=3),
+                    ], className="mt-3 mb-4"),
 
-            # Charts Row
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardHeader(id='trend-header', className="fw-bold"),
-                        dbc.CardBody(dcc.Graph(id='historical-trend-chart', config={'displayModeBar': False}))
-                    ], className="shadow-sm mb-4")
-                ], width=12),
-            ]),
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardHeader([
-                            dbc.Row([
-                                dbc.Col(id="comparison-header", className="fw-bold", width=8),
-                                dbc.Col(
-                                    dcc.Dropdown(
-                                        id='comparison-month-dropdown',
-                                        options=[{'label': d.strftime("%Y-%m"), 'value': i} for i, d in enumerate(df_net_salary.index)],
-                                        value=len(df_net_salary.index) - 1,
-                                        clearable=False,
-                                        style={'fontSize': '0.9rem'}
-                                    ), width=4
-                                )
-                            ], align="center")
-                        ]),
-                        dbc.CardBody(dcc.Graph(id='provincial-comparison-chart', config={'displayModeBar': False}, style={'height': '600px'}))
-                    ], className="shadow-sm mb-4")
-                ], width=12),
-            ])
+                    # Charts Row
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Card([
+                                dbc.CardHeader(id='trend-header', className="fw-bold"),
+                                dbc.CardBody(dcc.Graph(id='historical-trend-chart', config={'displayModeBar': False}))
+                            ], className="shadow-sm mb-4")
+                        ], width=12),
+                    ]),
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Card([
+                                dbc.CardHeader([
+                                    dbc.Row([
+                                        dbc.Col(id="comparison-header", className="fw-bold", width=8),
+                                        dbc.Col(
+                                            dcc.Dropdown(
+                                                id='comparison-month-dropdown',
+                                                options=[{'label': d.strftime("%Y-%m"), 'value': i} for i, d in enumerate(df_net_salary.index)],
+                                                value=len(df_net_salary.index) - 1,
+                                                clearable=False,
+                                                style={'fontSize': '0.9rem'}
+                                            ), width=4
+                                        )
+                                    ], align="center")
+                                ]),
+                                dbc.CardBody(dcc.Graph(id='provincial-comparison-chart', config={'displayModeBar': False}, style={'height': '600px'}))
+                            ], className="shadow-sm mb-4")
+                        ], width=12),
+                    ])
+                ]),
+                dbc.Tab(label="Analytics", tab_id="tab-analytics", id="tab-analytics", children=[
+                    dbc.Row([
+                        dbc.Col(id='analytics-report-container', width=12, className="mt-3")
+                    ])
+                ])
+            ], id="main-tabs", active_tab="tab-general")
         ], width=12, lg=9)
     ])
 ], fluid=True)
@@ -320,13 +429,14 @@ def toggle_language(btn_es, btn_en):
     Output('label-infl-cat', 'children'),
     Output('label-base-date', 'children'),
     Output('label-date-range', 'children'),
-    Output('trend-header', 'children'),
     Output('salary-type-radio', 'options'),
     Output('adjustment-toggle', 'options'),
     Output('ref-line-dropdown', 'options'),
     Output('offcanvas-usage', 'title'),
     Output('offcanvas-usage', 'children'),
     Output('open-offcanvas', 'children'),
+    Output('tab-general', 'label'),
+    Output('tab-analytics', 'label'),
     Input('lang-store', 'data')
 )
 def update_ui_language(lang):
@@ -337,9 +447,9 @@ def update_ui_language(lang):
         {'label': ' ' + t['basic'], 'value': 'basic'},
     ]
     adj_options = [
-        {'label': ' ' + t['nominal'], 'value': 'nominal'},
         {'label': ' ' + t['real'], 'value': 'real'},
         {'label': ' ' + t['cbt'], 'value': 'cbt'},
+        {'label': ' ' + t['base100_toggle'], 'value': 'index'},
     ]
     ref_options = [
         {'label': t['cba_adult'], 'value': 'canasta_basica_alimentaria'},
@@ -350,8 +460,9 @@ def update_ui_language(lang):
     return (
         t['title'], t['filters'], t['province'], t['salary_type'], 
         t['adjustment'], t['ref_line'], t['inf_cat'], t['base_date'], 
-        t['date_range'], t['hist_trend'], salary_options, adj_options, 
-        ref_options, t['instr_title'], t['instr_body'], "?"
+        t['date_range'], salary_options, adj_options, 
+        ref_options, t['instr_title'], t['instr_body'], "?",
+        t['tab_general'], t['tab_analytics']
     )
 
 @app.callback(
@@ -362,6 +473,8 @@ def update_ui_language(lang):
     Output('historical-trend-chart', 'figure'),
     Output('provincial-comparison-chart', 'figure'),
     Output('comparison-header', 'children'),
+    Output('trend-header', 'children'),
+    Output('analytics-report-container', 'children'),
     Input('province-dropdown', 'value'),
     Input('salary-type-radio', 'value'),
     Input('adjustment-toggle', 'value'),
@@ -375,6 +488,19 @@ def update_ui_language(lang):
 )
 def update_dashboard(selected_province, salary_type, adjustments, ref_line_col, infl_cat, base_date, start_date, end_date, comp_month_idx, lang):
     t = TRANSLATIONS[lang]
+    
+    # 0. Guards for None values (common during component init or language change)
+    if any(v is None for v in [selected_province, salary_type, adjustments, infl_cat, base_date, start_date, end_date, comp_month_idx]):
+        return no_update
+    
+    # Fallback for ref_line_col if it's missing but needed
+    if ref_line_col is None:
+        ref_line_col = 'linea_pobreza'
+
+    is_base100 = 'index' in adjustments
+    show_real = 'real' in adjustments
+    show_nominal = not show_real
+    show_ref = 'cbt' in adjustments
     
     # Data selection
     if salary_type == 'net':
@@ -393,58 +519,103 @@ def update_dashboard(selected_province, salary_type, adjustments, ref_line_col, 
     df_nom_filt = df_nom.loc[mask]
     df_real_filt = df_real.loc[mask]
     
-    # Variations calculation based on full series for accuracy
-    metrics = get_variation_metrics(df_nom[selected_province], df_real[selected_province])
+    # Variations calculation
+    metrics = get_variation_metrics(df_nom[selected_province], df_real[selected_province], ipc_series)
     
     # KPI components
-    kpi_latest = create_kpi_card(f"{t['latest']} {t[salary_type]}", f"${metrics['latest_nom']:,.0f}", lang=lang)
-    kpi_q = create_kpi_card(t['q_var'], f"{metrics['q_nom']:+.1f}%", metrics['q_real'], lang=lang)
-    kpi_a = create_kpi_card(t['a_var'], f"{metrics['a_nom']:+.1f}%", metrics['a_real'], lang=lang)
-    kpi_i = create_kpi_card(t['i_var'], f"{metrics['i_nom']:+.1f}%", metrics['i_real'], lang=lang)
+    latest_nom_fmt = f"${format_localized(metrics['latest_nom'], lang=lang)}"
+    kpi_latest = create_kpi_card(f"{t['latest']} {t[salary_type]}", latest_nom_fmt, lang=lang)
+    kpi_q = create_kpi_card(t['q_var'], f"{format_localized(metrics['q_nom'], lang=lang, decimals=1)}%", 
+                            nom_variation=metrics['q_nom'], ipc_variation=metrics['q_ipc'], 
+                            real_variation=metrics['q_real'], lang=lang)
+    kpi_a = create_kpi_card(t['a_var'], f"{format_localized(metrics['a_nom'], lang=lang, decimals=1)}%", 
+                            nom_variation=metrics['a_nom'], ipc_variation=metrics['a_ipc'], 
+                            real_variation=metrics['a_real'], lang=lang)
+    kpi_i = create_kpi_card(t['i_var'], f"{format_localized(metrics['i_nom'], lang=lang, decimals=1)}%", 
+                            nom_variation=metrics['i_nom'], ipc_variation=metrics['i_ipc'], 
+                            real_variation=metrics['i_real'], lang=lang)
 
     # Historical Trend Chart
     fig_hist = go.Figure()
+    y_axis_title = t['xaxis_salary']
+    trend_title = t['hist_trend']
     
-    if 'nominal' in adjustments:
-        fig_hist.add_trace(go.Scatter(
-            x=df_nom_filt.index, y=df_nom_filt[selected_province],
-            name=t['nom_trace'], line=dict(color='#2c3e50', width=3)
-        ))
+    # Reference Line Data (Nominal)
+    if show_ref and not df_cba_cbt.empty:
+        df_ref_nom = df_cba_cbt[ref_line_col].reindex(df_nom.index, method='ffill')
+        # Reference Line Data (Real)
+        df_ref_real_full = scraper.calculate_real_salary(pd.DataFrame({'ref': df_ref_nom}), ipc_series, base_date=base_date)
+        df_ref_real = df_ref_real_full['ref']
     
-    if 'real' in adjustments:
-        cat_name = infl_cat.replace('infl_', '').replace('_', ' ')
-        real_label = "Real" if lang == 'en' else "Real"
-        fig_hist.add_trace(go.Scatter(
-            x=df_real_filt.index, y=df_real_filt[selected_province],
-            name=f"{real_label} ({cat_name})", line=dict(color='#18bc9c', width=3)
-        ))
+    if is_base100:
+        try:
+            b_date_dt = pd.to_datetime(base_date)
+            y_axis_title = t['xaxis_index']
+            trend_title = t['hist_trend_base100']
+            
+            if show_nominal:
+                val_nom_base = df_nom.loc[b_date_dt, selected_province]
+                df_nom_idx = (df_nom_filt[selected_province] / val_nom_base) * 100
+                fig_hist.add_trace(go.Scatter(x=df_nom_idx.index, y=df_nom_idx, name=f"{t['nom_trace']} (Index)", line=dict(color='#2c3e50', width=3)))
+                
+                if show_ref:
+                    # Normalize Ref Line using Salary Base Value
+                    df_ref_idx = (df_ref_nom.loc[mask] / val_nom_base) * 100
+                    fig_hist.add_trace(go.Scatter(x=df_ref_idx.index, y=df_ref_idx, name="Ref. Index", line=dict(color='#e74c3c', dash='dash')))
+            
+            elif show_real:
+                val_real_base = df_real.loc[b_date_dt, selected_province]
+                df_real_idx = (df_real_filt[selected_province] / val_real_base) * 100
+                fig_hist.add_trace(go.Scatter(x=df_real_idx.index, y=df_real_idx, name="Real Index", line=dict(color='#18bc9c', width=3)))
+                
+                if show_ref:
+                    # Normalize Real Ref Line using Real Salary Base Value
+                    df_ref_real_idx = (df_ref_real.loc[mask] / val_real_base) * 100
+                    fig_hist.add_trace(go.Scatter(x=df_ref_real_idx.index, y=df_ref_real_idx, name="Ref. Real Index", line=dict(color='#e74c3c', dash='dash')))
+                    
+        except Exception:
+            is_base100 = False
+
+    if not is_base100:
+        if show_nominal:
+            fig_hist.add_trace(go.Scatter(x=df_nom_filt.index, y=df_nom_filt[selected_province], name=t['nom_trace'], line=dict(color='#2c3e50', width=3)))
+            if show_ref:
+                fig_hist.add_trace(go.Scatter(x=df_ref_nom.loc[mask].index, y=df_ref_nom.loc[mask], name="Ref. (Nominal)", line=dict(color='#e74c3c', dash='dash')))
         
-    if 'cbt' in adjustments and not df_cba_cbt.empty:
-        # Determine display name from TRANSLATIONS mapping
-        col_to_key = {
-            'canasta_basica_alimentaria': 'cba_adult',
-            'canasta_basica_total': 'cbt_adult',
-            'linea_indigencia': 'indigency_fam',
-            'linea_pobreza': 'poverty_fam'
-        }
-        ref_trace_name = t[col_to_key[ref_line_col]]
-        
-        cbt_filtered = df_cba_cbt[ref_line_col].reindex(df_nom.index, method='ffill').loc[start_date:end_date]
-        fig_hist.add_trace(go.Scatter(
-            x=cbt_filtered.index, y=cbt_filtered,
-            name=ref_trace_name, line=dict(color='#e74c3c', dash='dash')
-        ))
+        elif show_real:
+            fig_hist.add_trace(go.Scatter(x=df_real_filt.index, y=df_real_filt[selected_province], name="Real", line=dict(color='#18bc9c', width=3)))
+            if show_ref:
+                fig_hist.add_trace(go.Scatter(x=df_ref_real.loc[mask].index, y=df_ref_real.loc[mask], name="Ref. (Real)", line=dict(color='#e74c3c', dash='dash')))
 
     fig_hist.update_layout(
         margin=dict(l=20, r=20, t=20, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         hovermode="x unified",
-        template="plotly_white"
+        template="plotly_white",
+        yaxis_title=y_axis_title
     )
 
     # Provincial Comparison Chart
     comp_date = df_nom.index[comp_month_idx]
     comp_data = df_nom.loc[comp_date].sort_values(ascending=True)
+    
+    y_labels = list(comp_data.index)
+    if HAS_ANALYTICS:
+        date_anomalies = df_anomalies[df_anomalies['date'] == comp_date]
+        if not date_anomalies.empty:
+            for i, prov in enumerate(y_labels):
+                prov_anomaly = date_anomalies[date_anomalies['province'] == prov]
+                if not prov_anomaly.empty and prov_anomaly.iloc[0]['anomaly'] == -1:
+                    try:
+                        idx_current = df_real.index.get_loc(comp_date)
+                        if idx_current >= 3:
+                            val_curr = df_real.iloc[idx_current][prov]
+                            val_prev = df_real.iloc[idx_current-3][prov]
+                            pct_diff = (val_curr - val_prev) / val_prev
+                            icon = "✨" if pct_diff > 0 else "⚠️"
+                            y_labels[i] = f"{icon} {prov}"
+                    except:
+                        y_labels[i] = f"⚠️ {prov}"
     
     colors = ['#bdc3c7'] * len(comp_data)
     if selected_province in comp_data.index:
@@ -453,10 +624,10 @@ def update_dashboard(selected_province, salary_type, adjustments, ref_line_col, 
 
     fig_comp = go.Figure(go.Bar(
         x=comp_data.values,
-        y=comp_data.index,
+        y=y_labels,
         orientation='h',
         marker_color=colors,
-        text=[f"${x:,.0f}" for x in comp_data.values],
+        text=[f"${format_localized(x, lang=lang)}" if not pd.isna(x) else "-" for x in comp_data.values],
         textposition='outside',
         cliponaxis=False
     ))
@@ -470,8 +641,56 @@ def update_dashboard(selected_province, salary_type, adjustments, ref_line_col, 
     )
 
     comp_header = f"{t['comp_header_prefix']} ({comp_date.strftime('%Y-%m')})"
+    
+    # Cluster Analysis Report Deep Dive
+    report_content = []
+    
+    if HAS_ANALYTICS:
+        df_long_c = df_real_filt.T.reset_index().rename(columns={df_real_filt.T.reset_index().columns[0]: 'province'})
+        df_long_c = df_long_c.merge(df_clusters, on='province').melt(id_vars=['province', 'cluster'], var_name='date', value_name='real_salary')
+        df_long_c['date'] = pd.to_datetime(df_long_c['date'])
+        df_long_c['cluster'] = df_long_c['cluster'].astype(str)
 
-    return kpi_latest, kpi_q, kpi_a, kpi_i, fig_hist, fig_comp, comp_header
+        # Narrative Report Deep Dive
+        if REPORT_SECTIONS["intro"]:
+            report_content.append(dbc.Card([
+                dbc.CardBody(dcc.Markdown(REPORT_SECTIONS["intro"]))
+            ], className="mb-4 shadow-sm"))
+            
+            for i, section_text in enumerate(REPORT_SECTIONS["clusters"]):
+                # Create a specific plot for this cluster section
+                df_cls = df_long_c[df_long_c['cluster'] == str(i)]
+                fig_cls_small = px.line(df_cls, x='date', y='real_salary', color='province',
+                                       title=f"Cluster {i} Detail", template='plotly_white', height=400)
+                
+                # Refine Plot Style
+                fig_cls_small.update_layout(
+                    legend_title_text=None, # Remove 'province' from legend
+                    margin=dict(l=40, r=20, t=40, b=40),
+                    xaxis_title=t['date_range'].replace(':', ''),
+                    yaxis_title="Salario Real" if lang == 'es' else "Real Salary"
+                )
+                
+                # Card for Text
+                report_content.append(dbc.Card([
+                    dbc.CardHeader(f"Deep Dive: Cluster {i}", className="fw-bold bg-light"),
+                    dbc.CardBody(dcc.Markdown(section_text))
+                ], className="mb-3 shadow-sm"))
+                
+                # Card for Plot
+                report_content.append(dbc.Card([
+                    dbc.CardBody(dcc.Graph(figure=fig_cls_small, config={'displayModeBar': False}))
+                ], className="mb-4 shadow-sm"))
+            
+            if REPORT_SECTIONS["synthesis"]:
+                report_content.append(dbc.Card([
+                    dbc.CardHeader("Synthesis & Future Outlook", className="fw-bold bg-dark text-white"),
+                    dbc.CardBody(dcc.Markdown(REPORT_SECTIONS["synthesis"]))
+                ], className="mb-4 shadow-sm"))
+    else:
+        report_content = [html.P(t['no_analytics'], className="text-center mt-5")]
+
+    return kpi_latest, kpi_q, kpi_a, kpi_i, fig_hist, fig_comp, comp_header, trend_title, report_content
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8050, debug=True)

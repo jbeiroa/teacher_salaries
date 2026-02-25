@@ -182,7 +182,8 @@ class Scraper():
     def calculate_variations(self, series):
         """Calculates quarterly, annual (accumulated), and inter-annual variations.
 
-        Computes percentage changes for different time horizons from a given series.
+        Computes percentage changes for different time horizons. 
+        Detects series frequency (monthly vs quarterly) to adjust periods.
 
         Args:
             series (pd.Series): A time series of values.
@@ -192,13 +193,48 @@ class Scraper():
                 'interannual' variation columns.
         """
         df_var = pd.DataFrame(index=series.index)
-        df_var['quarterly'] = series.pct_change(periods=1) * 100
         
-        # Annual accumulated (since Jan of the same year)
-        df_var['annual_acc'] = series.groupby(series.index.year).apply(lambda x: (x / x.iloc[0] - 1) * 100).reset_index(level=0, drop=True)
+        # Detect frequency
+        # We check the gap between the last two indices
+        if len(series) < 2:
+            return pd.DataFrame(columns=['quarterly', 'annual_acc', 'interannual'], index=series.index)
+            
+        months_gap = (series.index[-1].year - series.index[-2].year) * 12 + (series.index[-1].month - series.index[-2].month)
         
-        # Inter-annual (same month/quarter previous year)
-        # Assuming quarterly data, 4 periods back
-        df_var['interannual'] = series.pct_change(periods=4) * 100
+        is_quarterly = months_gap >= 3
+        q_periods = 1 if is_quarterly else 3
+        ia_periods = 4 if is_quarterly else 12
+        
+        # 1. Quarterly Variation (Last 3 months)
+        df_var['quarterly'] = series.pct_change(periods=q_periods) * 100
+        
+        # 2. Inter-annual (Same month/quarter previous year)
+        df_var['interannual'] = series.pct_change(periods=ia_periods) * 100
+        
+        # 3. Annual accumulated (Since Dec of previous year)
+        # We need the value of the previous Dec for each year
+        annual_acc = []
+        for date in series.index:
+            try:
+                # Value at latest Dec before this date
+                prev_dec_date = datetime(date.year - 1, 12, 1)
+                # Find the value in the series closest to or at that Dec
+                # If it's quarterly, it might be 12-01
+                if prev_dec_date in series.index:
+                    base_val = series.loc[prev_dec_date]
+                else:
+                    # Fallback: find the last available value from previous years
+                    prev_year_data = series[series.index.year < date.year]
+                    if not prev_year_data.empty:
+                        base_val = prev_year_data.iloc[-1]
+                    else:
+                        base_val = series.iloc[0] # Fallback to first ever
+                
+                acc = (series.loc[date] / base_val - 1) * 100
+                annual_acc.append(acc)
+            except:
+                annual_acc.append(np.nan)
+                
+        df_var['annual_acc'] = annual_acc
         
         return df_var

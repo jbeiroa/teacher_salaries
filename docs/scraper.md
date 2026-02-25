@@ -29,9 +29,9 @@ Adjusts nominal values for inflation.
 *   **Logic:** Multiplies the nominal amount by the ratio of the base month index to the current month index.
 
 ### `calculate_variations(series)`
-Computes growth metrics:
-*   `quarterly`: Percentage change vs. previous period.
-*   `annual_acc`: Percentage change since January of the same year.
+Computes growth metrics with frequency awareness:
+*   `quarterly`: Percentage change over the last 3 months (automatically detects if input is monthly or quarterly).
+*   `annual_acc`: Percentage change since **December of the previous year**.
 *   `interannual`: Percentage change vs. the same period last year.
 
 ## Data Consistency

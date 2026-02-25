@@ -11,29 +11,39 @@ The application is built using a modular Dash architecture:
 
 ## Interactive Components
 
+### Multi-page Navigation
+*   **Dashboard Tab:** The primary analytical interface for salary trends and comparisons.
+*   **Analytics Tab:** A research portal featuring a narrative deep dive into provincial clusters, supported by specialized visualizations.
+
 ### Control Sidebar
 *   **Province Selector:** Choose any of the 24 Argentine jurisdictions or the weighted average.
 *   **Salary Type:** Toggle between Net, Gross, and Basic salaries.
-*   **Adjustment Switches:** Show/hide Nominal lines, Real (Adjusted) lines, or Reference lines (CBA/CBT).
-*   **Reference Line Selector:** Choose between individual baskets (CBA/CBT Adult) or family lines (Poverty/Indigency).
+*   **Adjustment Switches:**
+    *   **Show Real:** Toggles between inflation-adjusted (Real) and Nominal values.
+    *   **Show Ref. Line:** Displays CBA/CBT adult baskets or family poverty lines.
+    *   **Show as Index (Base 100):** Normalizes charts to percentage growth relative to the selected **Base Date**.
 *   **Inflation Category:** Select specific INDEC indices (General, Food, Housing, etc.) for adjustment.
-*   **Base Date Selector:** Pick the reference month (Base 100) for real salary calculations.
-*   **Historical Date Range:** A `DatePickerRange` to filter the trend chart.
-
-### Header Controls
-*   **Language Toggle:** Switch between ES and EN.
-*   **Help Button ("?"):** Opens a slide-out menu with links to data sources and category explanations.
+*   **Base Date Selector:** Defines the reference month ($Base=100$) for real salary and index calculations.
 
 ## Visualizations
 
 ### 1. Key Performance Indicators (KPIs)
-Displays the latest salary in nominal terms alongside the **Real Variation** (inflation-adjusted) for Quarterly, Annual, and Inter-annual periods.
+Displays the latest salary in nominal terms alongside:
+*   **Context:** Nominal growth vs. Inflation growth (e.g., `Nom: +20% | IPC: +22%`).
+*   **Net Result:** Real variation subtext (e.g., `Var. Real: -2.0%`) color-coded by performance.
 
 ### 2. Historical Trend Chart
-Visualizes purchasing power over time. It aligns all data sources to start from **December 2016** to maintain consistency with modern INDEC IPC series.
+Visualizes purchasing power over time.
+*   **Real Mode:** Shows salary and baskets in constant currency.
+*   **Index Mode:** Plots the growth trajectory of salaries relative to the poverty line.
 
 ### 3. Provincial Comparison
-A ranked horizontal bar chart comparing the selected salary type across all provinces for a specific **Comparison Month**, which can be selected directly within the chart header.
+A ranked bar chart showing:
+*   **Anomalies:** Jurisdictions with significant 3-month shocks are marked with **⚠️ (Drop)** or **✨ (Gain)**.
+*   **Month Selection:** Interactive dropdown to compare any point in the historical series.
+
+### 4. Advanced Analytics Report
+Dynamic deep-dive intercalating expert research text with specific cluster line plots to explain jurisdictional economic behaviors.
 
 ## Running the Application
 
