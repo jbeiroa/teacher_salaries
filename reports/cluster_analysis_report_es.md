@@ -1,110 +1,110 @@
-# **Fiscal Federalism and the End of the Central Administration: a cluster analysis of provincial teacher salaries**
+# **Federalismo Fiscal y el Fin de la Administración Central: un análisis de clusters de los salarios docentes provinciales**
 
-The Argentine educational system has transitioned into a state of extreme fiscal fragmentation, accelerated by the structural macroeconomic shocks of late 2023 and early 2024\. Historically, the financing of the educational system was governed by the Law of Educational Financing and supported by the **Fondo Nacional de Incentivo Docente (FONID)**, a horizontal salary supplement created in 1998\. The discontinuation of this fund in February 2024 forced provinces to absorb these costs locally or allow a direct nominal and real contraction of teacher incomes, representing a 9% to 20% impact on gross pocket salaries [[1]].
+El sistema educativo argentino ha transicionado hacia un estado de extrema fragmentación fiscal, acelerada por los choques macroeconómicos estructurales de finales de 2023 y principios de 2024\. Históricamente, el financiamiento del sistema estuvo regido por la Ley de Financiamiento Educativo y sostenido por el **Fondo Nacional de Incentivo Docente (FONID)**, un suplemento salarial horizontal creado en 1998\. La discontinuación de este fondo en febrero de 2024 obligó a las provincias a absorber estos costos localmente o permitir una contracción nominal y real directa de los ingresos docentes, representando un impacto del 9% al 20% en los salarios de bolsillo [[1]].
 
-This landscape, analyzed via K-Shape cluster analysis, groups jurisdictions by the behavior of their salary signals. The following table identifies the national fiscal constraints, using official **INDEC** data to contextualize the triple-digit inflation and massive 84% real reduction in federal transfers [[2]] that triggered provincial divergence.
+Este panorama, analizado mediante el análisis de clusters K-Shape, agrupa a las jurisdicciones por el comportamiento de sus señales salariales. La siguiente tabla identifica las restricciones fiscales nacionales, utilizando datos oficiales del **INDEC** para contextualizar la inflación de tres dígitos y la reducción real masiva del 84% en las transferencias federales [[2]] que desencadenó la divergencia provincial.
 
-| Macroeconomic Variable | 2023 Performance | 2024-2025 Outlook | Strategic Impact on Education |
+| Variable Macroeconómica | Desempeño 2023 | Perspectiva 2024-2025 | Impacto Estratégico en Educación |
 | :---- | :---- | :---- | :---- |
-| National Inflation (IPC) | 211.4% (Official) | Triple-digit volatility | Systematic erosion of scales [[3]] |
-| FONID Transfer Status | Active | Discontinued (Feb 2024\) | 9% to 20% nominal salary hit [[4]] |
-| National Salary Floor | $250,000 | $500,000 (Stagnant) | Loss of floor relevance vs. costs [[5]] |
-| Transfer to Provinces | \- | \-84% Real decrease [[2]] | Forced fiscal consolidation [[4]] |
+| Inflación Nacional (IPC) | 211.4% (Oficial) | Volatilidad de tres dígitos | Erosión sistemática de escalas [[3]] |
+| Estado del FONID | Activo | Discontinuado (Feb 2024\) | Golpe del 9% al 20% en el salario nominal [[4]] |
+| Piso Salarial Nacional | $250.000 | $500.000 (Estancado) | Pérdida de relevancia del piso vs. costos [[5]] |
+| Transferencias a Provincias | \- | \-84% Decremento Real [[2]] | Consolidación fiscal forzada [[4]] |
 
-## **Cluster 1: The Architecture of the Permanent Bonus and the Sawtooth Income Model**
+## **Cluster 1: La Arquitectura del Bono Permanente y el Modelo de Ingresos "Serrucho"**
 
-**Jurisdictions: Formosa, Santiago del Estero**
+**Jurisdicciones: Formosa, Santiago del Estero**
 
-Cluster 1 represents a fiscal strategy centered on non-remunerative, extraordinary interventions. As seen in real salary plots, the signal is characterized by massive vertical spikes in December, resulting in the _sawtooth_ like trend.
+El Cluster 1 representa una estrategia fiscal centrada en intervenciones extraordinarias no remunerativas. Como se observa en los gráficos de salario real, la señal se caracteriza por picos verticales masivos en diciembre, resultando en una tendencia tipo _serrucho_.
 
-### **The Santiago del Estero Paradigm and the "Pension Trap"**
+### **El Paradigma de Santiago del Estero y la "Trampa Previsional"**
 
-Santiago del Estero serves as the quintessential example. In December 2024, the province achieved the highest purchasing power in the country ($950,000), but this was an artificial peak driven by a massive year-end bonus [[6]]. While the provincial government announced historic bonos of $1.3 million [[7]] and later $2.1 million [[8]] (in three installments) for 2024-2025, the underlying monthly base salary remains among the lowest in the country [[9]].
+Santiago del Estero sirve como el ejemplo por excelencia. En diciembre de 2024, la provincia alcanzó el mayor poder adquisitivo del país ($950.000), pero este fue un pico artificial impulsado por un bono de fin de año masivo [[6]]. Mientras que el gobierno provincial anunció bonos históricos de $1,3 millones [[7]] y luego $2,1 millones [[8]] (en tres cuotas) para 2024-2025, el salario base mensual subyacente sigue siendo uno de los más bajos del país [[9]].
 
-Analytical interpretation suggests a "pension trap": because these bonos are non-remunerative and non-bonificable, they are legally excluded from the calculation of retirement benefits under current social security frameworks, which only consider remunerative items [[10]]. Consequently, teachers experience a standard of living during active years that evaporates upon retirement.
+La interpretación analítica sugiere una "trampa previsional": debido a que estos bonos son no remunerativos y no bonificables, quedan legalmente excluidos del cálculo de los haberes jubilatorios bajo los marcos de seguridad social actuales, que solo consideran conceptos remunerativos [[10]]. En consecuencia, los docentes experimentan un nivel de vida durante sus años activos que se evapora al momento de la jubilación.
 
-### **Formosa and the Masking of Devaluation**
+### **Formosa y el Enmascaramiento de la Devaluación**
 
-Formosa follows a similar trajectory, implementing a $700,000 bono for early 2025 [[11]]. Although the province assumed the cost of FONID with local funds, it froze these values at December 2023 levels, causing the real value of the supplement to be eroded by inflation [[12]].
+Formosa sigue una trayectoria similar, implementando un bono de $700.000 para principios de 2025 [[11]]. Aunque la provincia asumió el costo del FONID con fondos locales, congeló estos valores a niveles de diciembre de 2023, provocando que el valor real del suplemento sea erosionado por la inflación [[12]].
 
-| Province | Year-End Bono (2024-2025) | Installment Structure | Fiscal Observation |
+| Provincia | Bono de Fin de Año (2024-2025) | Estructura de Cuotas | Observación Fiscal |
 | :---- | :---- | :---- | :---- |
-| Santiago del Estero | $2.100.000 | 3 x $700k (Oct/Nov/Dec) [[8]] | Budget \+20.7% vs Salary \-33.4% [[2]] |
-| Formosa | $700,000 | 2 x $350k (Jan/Feb) [[11]] | FONID values frozen at Dec-23 [[12]] |
+| Santiago del Estero | $2.100.000 | 3 x $700k (Oct/Nov/Dec) [[8]] | Presupuesto \+20.7% vs Salario \-33.4% [[2]] |
+| Formosa | $700.000 | 2 x $350k (Ene/Feb) [[11]] | Valores de FONID congelados a Dic-23 [[12]] |
 
-## **Cluster 2: Structural Erosion in the Productive Center and North**
+## **Cluster 2: El centro y norte productivo erosionado**
 
-**Jurisdictions: Catamarca, Córdoba, Entre Ríos, Misiones, Salta, Santa Fe**
+**Jurisdicciones: Catamarca, Córdoba, Entre Ríos, Misiones, Salta, Santa Fe**
 
-Cluster 2, the "Eroded Center and North", displays an "L-shaped" trajectory: a permanent step-down in real value after December 2023\. Official reports indicate that these provinces used teacher wages as a primary tool for fiscal consolidation following the loss of national transfers [[2]].
+El Cluster 2, el "Centro y Norte Erosionado", muestra una trayectoria en forma de "L": un escalón permanente hacia abajo en el valor real después de diciembre de 2023\. Los informes oficiales indican que estas provincias utilizaron los salarios docentes como una herramienta principal para la consolidación fiscal tras la pérdida de las transferencias nacionales [[2]].
 
-| Province | Real Salary Drop (23-24) | Education Budget Variation | FONID Strategy |
+| Provincia | Caída Salarial Real (23-24) | Variación Presupuesto Educativo | Estrategia FONID |
 | :---- | :---- | :---- | :---- |
-| Entre Ríos | \-27.6% [[2]] | \-23.9% [[2]] | Not assumed [[12]] |
-| Santa Fe | \-26.4% [[2]] | \-19.3% [[2]] | Partial integration [[12]] |
-| Córdoba | \-23.8% [[2]] | \-31.4% [[2]] | Negotiated fixed sums [[12]] |
-| Misiones | \-20.0% (approx) | \- | Fiscal adjustment [[18]] |
-| Salta | \-25.0% (approx) | \- | Not assumed [[12]] |
-| Catamarca | \-22.0% (approx) | \- | Local coverage [[12]] |
+| Entre Ríos | \-27.6% [[2]] | \-23.9% [[2]] | No asumido [[12]] |
+| Santa Fe | \-26.4% [[2]] | \-19.3% [[2]] | Integración parcial [[12]] |
+| Córdoba | \-23.8% [[2]] | \-31.4% [[2]] | Sumas fijas [[12]] |
+| Misiones | \-20.0% (aprox) | \- | Ajuste fiscal [[18]] |
+| Salta | \-25.0% (aprox) | \- | No asumido [[12]] |
+| Catamarca | \-22.0% (aprox) | \- | Cobertura local [[12]] |
 
-## **Cluster 3: Buenos Aires between volatility and decay**
+## **Cluster 3: Buenos Aires entre la volatilidad y el decaimiento**
 
-**Jurisdictions: Province of Buenos Aires (PBA)**
+**Jurisdicciones: Provincia de Buenos Aires (PBA)**
 
-PBA is a unique outlier characterized by specific mid-series spikes in 2018 and 2021. These are explained by the implementation of official "extraordinary bonuses" designed to defend the salary floor.
+PBA es un caso atípico único caracterizado por picos específicos a mitad de la serie en 2018 y 2021\. Estos se explican por la implementación de "bonos extraordinarios" oficiales diseñados para defender el piso salarial.
 
-* **The 2018 Peak ($7,000):** In December 2018, via **Decree 1145/18**, the province implemented a non-remunerative "Bono extraordinario" of $7,000 to compensate for a 15% real wage loss during that year's 47% inflation crisis [[13]].  
-* **The 2021 Peak ($20,000):** In December 2021, the administration announced a $20,000 bonus for all state workers as a post-pandemic recovery measure [[14]].
+* **El Pico de 2018 ($7.000):** En diciembre de 2018, mediante el **Decreto 1145/18**, la provincia implementó un "Bono extraordinario" no remunerativo de $7.000 para compensar una pérdida salarial real del 15% durante la crisis inflacionaria del 47% de ese año [[13]].  
+* **El Pico de 2021 ($20.000):** En diciembre de 2021, la administración anunció un bono de $20.000 para todos los trabajadores estatales como medida de recuperación post-pandemia [[14]].
 
-| Period | Peak Driver | Extraordinary Sum (Bono) | Primary Source |
+| Período | Impulsor del Pico | Suma Extraordinaria (Bono) | Fuente Primaria |
 | :---- | :---- | :---- | :---- |
-| Dec-2018 | Currency Crisis | $7,000 (Activos) | Dec. 1145/18 [[13]] |
-| Dec-2021 | Post-Pandemic | $20,000 (Statewide) | Official Announcement [[14]] |
+| Dic-2018 | Crisis Cambiaria | $7.000 (Activos) | Dec. 1145/18 [[13]] |
+| Dic-2021 | Post-Pandemia | $20.000 (Estatal) | Anuncio Oficial [[14]] |
 
-## **Cluster 4: structural decay**
+## **Cluster 4: Decaimiento estructural**
 
-**Jurisdictions: Chubut, San Luis, Tucumán**
+**Jurisdicciones: Chubut, San Luis, Tucumán**
 
-This cluster shows a long-term downward slope with a precarious stabilization. The inclusion of San Luis here represents a catastrophic shift following its "Economic Emergency Law" in 2024 [[15]].
+Este cluster muestra una pendiente descendente de largo plazo con una estabilización precaria. La inclusión de San Luis representa un cambio catastrófico tras su "Ley de Emergencia Económica" en 2024 [[15]].
 
-| Province | Real Salary Drop (2024) | Context | Key Driver of Decline |
+| Provincia | Caída Salarial Real (2024) | Contexto | Impulsor del Declive |
 | :---- | :---- | :---- | :---- |
-| San Luis | \-44.0% [[16]] | Emergency | Suspension of clauses [[16]] |
-| Chubut | \-13.4% | Fiscal Insolvency | Multi-year crisis [[17]] |
-| Tucumán | \-22.4% | High Dependency | Budget cuts [[18]] |
+| San Luis | \-44.0% [[16]] | Emergencia | Suspensión de cláusulas [[16]] |
+| Chubut | \-13.4% | Insolvencia Fiscal | Crisis multianual [[17]] |
+| Tucumán | \-22.4% | Alta Dependencia | Recortes presupuestarios [[18]] |
 
-## **Cluster 5: volatility and ladder flattening**
+## **Cluster 5: Volatilidad y achatamiento de la pirámide**
 
-**Jurisdictions: La Pampa, La Rioja, San Juan**
+**Jurisdicciones: La Pampa, La Rioja, San Juan**
 
-This cluster is defined by high variance and the use of non-remunerative sums like the "Quincenita" ($120,000 monthly) in La Rioja [[19]].
+Este cluster se define por una alta varianza y el uso de sumas no remunerativas como la "Quincenita" ($120,000 mensuales) en La Rioja [[19]].
 
-A critical insight for this cluster is the "Ladder Flattening" or seniority compression [[10]]. This mechanism results in a "flattened" pyramid where a teacher with 30 years of experience earns a diminishing differential rendering professional seniority economically stagnant [[18]].
+Un aspecto crítico para este cluster es el "Achatamiento de la Escala" o compresión de la antigüedad [[10]]. Este mecanismo resulta en una pirámide "achatada" donde un docente con 30 años de experiencia gana un diferencial cada vez menor, volviendo el progreso profesional económicamente estancado [[18]].
 
-## **Cluster 6: Resource Sovereignty and the Recovery Axis**
+## **Cluster 6: Soberanía de Recursos y Eje de Recuperación**
 
-**Jurisdictions: Chaco, Ciudad de Buenos Aires, Corrientes, Jujuy, Mendoza, Neuquén, Río Negro, Santa Cruz, Tierra del Fuego**
+**Jurisdicciones: Chaco, Ciudad de Buenos Aires, Corrientes, Jujuy, Mendoza, Neuquén, Río Negro, Santa Cruz, Tierra del Fuego**
 
-Cluster 6 is the only group showing a positive slope or marked recovery in 2024. According to the **Informe Indicativo de Salarios Docentes**, Neuquén currently sets the national "salary ceiling" [[17]].
+El Cluster 6 es el único grupo que muestra una pendiente positiva o recuperación marcada en 2024\. Según el **Informe Indicativo de Salarios Docentes**, Neuquén establece actualmente el "techo salarial" nacional [[17]].
 
-| Province | 2024 Performance | Key Revenue Driver | Observation |
+| Provincia | Desempeño 2024 | Impulsor de Ingresos | Observación |
 | :---- | :---- | :---- | :---- |
-| Neuquén | Positive / Growth | Oil & Gas Royalties [[21]] | IPC Adjustment [[17]] |
-| Santa Cruz | \+63.8% Recovery | Mining / Oil | New Salary Policy [[22]] |
-| CABA | \-15.0% (approx) | High Base | Recovery in late 2024 [[17]] |
-| Mendoza | \+12.0% (recovery) | Resource-driven | 2024 rebound [[18]] |
-| Jujuy / Chaco | Stabilization | Local Funds / Coparticipation | Recovery from low base [[23]] |
-| Río Negro | Positive / Growth | Energy / Tourism | Salary updates [[17]] |
-| Corrientes | Stabilization | Coparticipation | Budget discipline [[18]] |
-| Tierra del Fuego | Stable / High | Industrial Promotion | Regional subsidies [[5]] |
+| Neuquén | Positivo / Crecimiento | Regalías de Hidrocarburos [[21]] | Actualización IPC [[17]] |
+| Santa Cruz | \+63.8% Recuperación | Minería / Petróleo | Nueva Política Salarial [[22]] |
+| CABA | \-15.0% (aprox) | Base Alta | Recuperación fines 2024 [[17]] |
+| Mendoza | \+12.0% (recup.) | Recursos | Rebote 2024 [[18]] |
+| Jujuy / Chaco | Estabilización | Fondos Propios / Coparticipación | Recuperación desde base baja [[23]] |
+| Río Negro | Positivo / Crecimiento | Energía / Turismo | Actualizaciones salariales [[17]] |
+| Corrientes | Estabilización | Coparticipación | Disciplina presupuestaria [[18]] |
+| Tierra del Fuego | Estable / Alto | Promoción Industrial | Subsidios regionales [[5]] |
 
-## **Synthesis and Future Outlook: The Quality Trap and Professional Attrition**
+## **Síntesis y Perspectivas Futuras: La Trampa de la Calidad y la Atrición Profesional**
 
-The real salary index reveals that for 21 out of 24 provinces, current salaries are lower than they were a decade ago [[6]]. The teacher is now the primary victim of a fragmented fiscal system where educational opportunity is determined strictly by provincial resource sovereignty.
+El índice de salario real revela que para 21 de las 24 provincias, los salarios actuales son más bajos que hace una década [[6]]. El docente es ahora la principal víctima de un sistema fiscal fragmentado donde la oportunidad educativa está determinada estrictamente por la soberanía de recursos provinciales.
 
-In conclusion, the Argentine educational system is currently a mirror of its broader economic crisis: a few "islands" of prosperity supported by natural resources, surrounded by a "sea" of fiscal erosion where the teaching profession is being systematically devalued [[24]].
+En conclusión, el sistema educativo argentino es actualmente un espejo de su crisis económica más amplia: unas pocas "islas" de prosperidad sostenidas por recursos naturales, rodeadas de un "mar" de erosión fiscal donde la profesión docente está siendo devaluada sistemáticamente [[24]].
 
-## **References**
+## **Referencias**
 
 1. ¿Qué hicieron las provincias con el FONID? \- El Auditor, acceso: febrero 25, 2026, [https://elauditor.info/investigacion/-que-hicieron-las-provincias-con-el-fonid-\_a66cf680ca4c5db8b13bf943a](https://elauditor.info/investigacion/-que-hicieron-las-provincias-con-el-fonid-_a66cf680ca4c5db8b13bf943a)  
 2. La inversión educativa cayó en 19 provincias en la última década y arrastró a los salarios docentes \- Infobae, acceso: febrero 25, 2026, [https://www.infobae.com/educacion/2025/11/13/la-inversion-educativa-cayo-en-19-provincias-en-la-ultima-decada-y-arrastro-a-los-salarios-docentes/](https://www.infobae.com/educacion/2025/11/13/la-inversion-educativa-cayo-en-19-provincias-en-la-ultima-decada-y-arrastro-a-los-salarios-docentes/)  

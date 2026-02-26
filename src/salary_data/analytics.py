@@ -89,12 +89,29 @@ class AnalyticsPipeline:
                 
             return df_clusters, df_anomalies_long
     
-    def load_latest_artifacts(self):
-        """Fetch the latest clusters and anomalies from MLflow."""
+    def load_latest_artifacts(self, local_first=True):
+        """Fetch the latest clusters and anomalies. Prioritize local files for production."""
+        
+        # 1. Try local files first (Production/Bundle approach)
+        if local_first:
+            clusters_path = "artifacts/clusters.parquet"
+            anomalies_path = "artifacts/anomalies.parquet"
+            
+            if os.path.exists(clusters_path) and os.path.exists(anomalies_path):
+                try:
+                    df_clusters = pd.read_parquet(clusters_path)
+                    df_anomalies = pd.read_parquet(anomalies_path)
+                    print(f"Loaded artifacts from local storage: {clusters_path}")
+                    return df_clusters, df_anomalies
+                except Exception as e:
+                    print(f"Error loading local artifacts: {e}. Falling back to MLflow...")
+
+        # 2. Fallback to MLflow (Development approach)
         client = mlflow.tracking.MlflowClient(self.db_uri)
         try:
             experiment = client.get_experiment_by_name(self.experiment_name)
             if not experiment:
+                print("MLflow experiment not found.")
                 return None, None
             
             runs = client.search_runs(
@@ -104,6 +121,7 @@ class AnalyticsPipeline:
             )
             
             if not runs:
+                print("No MLflow runs found.")
                 return None, None
                 
             latest_run = runs[0]
@@ -116,7 +134,8 @@ class AnalyticsPipeline:
             df_clusters = pd.read_parquet(clusters_path)
             df_anomalies = pd.read_parquet(anomalies_path)
             
+            print(f"Loaded artifacts from MLflow run: {run_id}")
             return df_clusters, df_anomalies
         except Exception as e:
-            print(f"Could not load artifacts: {e}")
+            print(f"Could not load artifacts from any source: {e}")
             return None, None

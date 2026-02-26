@@ -17,19 +17,51 @@ pipeline = AnalyticsPipeline()
 df_clusters, df_anomalies = pipeline.load_latest_artifacts()
 HAS_ANALYTICS = df_clusters is not None
 
-# Load and Parse Report
-REPORT_PATH = "reports/cluster_analysis_report.md"
-REPORT_SECTIONS = {"intro": "", "clusters": [], "synthesis": ""}
-if os.path.exists(REPORT_PATH):
-    with open(REPORT_PATH, "r") as f:
+# Load and Parse Reports
+REPORT_SECTIONS = {
+    "es": {"intro": "", "clusters": [], "synthesis": ""},
+    "en": {"intro": "", "clusters": [], "synthesis": ""}
+}
+
+def process_citations(text):
+    """Converts citation numbers in [[N]] format to superscript links."""
+    # 1. Citations in text: Match [[N]] and convert to <sup><a href="#refN">N</a></sup>
+    text = re.sub(r'\[\[(\d{1,2})\]\]', r'<sup><a href="#ref\1">\1</a></sup>', text)
+    
+    # 2. Reference list anchors:
+    # Match a line starting with 1. or 24. in the References section
+    text = re.sub(r'^(\d{1,2})\.', r'<a id="ref\1"></a>\1.', text, flags=re.MULTILINE)
+    return text
+
+def parse_report(path, lang):
+    if not os.path.exists(path):
+        return
+    with open(path, "r") as f:
         content = f.read()
-        # Use regex to split by horizontal rule on its own line to avoid breaking tables
-        parts = re.split(r'\n---\n', content)
-        if len(parts) >= 8:
-            REPORT_SECTIONS["intro"] = parts[0].strip()
-            # Parts 1 to 6 are the clusters
-            REPORT_SECTIONS["clusters"] = [p.strip() for p in parts[1:7]]
-            REPORT_SECTIONS["synthesis"] = parts[7].strip()
+        sections = re.split(r'\n(?=## \*\*)', content)
+        intro_parts = []
+        cluster_start_idx = -1
+        for idx, s in enumerate(sections):
+            if "## **Cluster 1:" in s:
+                cluster_start_idx = idx
+                break
+            intro_parts.append(s)
+        
+        REPORT_SECTIONS[lang]["intro"] = process_citations("\n\n".join(intro_parts).strip())
+        
+        if cluster_start_idx != -1:
+            synthesis_parts = []
+            for s in sections[cluster_start_idx:]:
+                if "## **Cluster" in s:
+                    REPORT_SECTIONS[lang]["clusters"].append(process_citations(s.strip()))
+                else:
+                    synthesis_parts.append(s.strip())
+            
+            if synthesis_parts:
+                REPORT_SECTIONS[lang]["synthesis"] = process_citations("\n\n".join(synthesis_parts).strip())
+
+parse_report("reports/cluster_analysis_report.md", "en")
+parse_report("reports/cluster_analysis_report_es.md", "es")
 
 # Pre-load and align data to start from Dec 2016 (INDEC IPC start)
 START_LIMIT = '2016-12-01'
@@ -334,7 +366,7 @@ app.layout = dbc.Container([
                         id='date-picker-range',
                         min_date_allowed=df_net_salary.index[0],
                         max_date_allowed=df_net_salary.index[-1],
-                        start_date=df_net_salary.index[-13], # ~3 years
+                        start_date=df_net_salary.index[0], # Dec 2016
                         end_date=df_net_salary.index[-1],
                         display_format='YYYY-MM',
                         className="mb-3"
@@ -387,8 +419,18 @@ app.layout = dbc.Container([
                     ])
                 ]),
                 dbc.Tab(label="Analytics", tab_id="tab-analytics", id="tab-analytics", children=[
+                    dcc.Store(id='analytics-carousel-index', data=0),
                     dbc.Row([
-                        dbc.Col(id='analytics-report-container', width=12, className="mt-3")
+                        dbc.Col([
+                            html.Div(id='analytics-report-container', className="mt-3"),
+                            html.Div([
+                                dbc.ButtonGroup([
+                                    dbc.Button("←", id="analytics-prev", color="secondary", outline=True, size="sm"),
+                                    dbc.Button(id="analytics-progress", color="secondary", outline=True, size="sm", disabled=True, style={"minWidth": "100px"}),
+                                    dbc.Button("→", id="analytics-next", color="secondary", outline=True, size="sm"),
+                                ], className="shadow-sm")
+                            ], className="d-flex justify-content-center mt-3 mb-5")
+                        ], width=12)
                     ])
                 ])
             ], id="main-tabs", active_tab="tab-general")
@@ -466,6 +508,24 @@ def update_ui_language(lang):
     )
 
 @app.callback(
+    Output('analytics-carousel-index', 'data'),
+    Input('analytics-prev', 'n_clicks'),
+    Input('analytics-next', 'n_clicks'),
+    State('analytics-carousel-index', 'data'),
+    prevent_initial_call=True
+)
+def navigate_carousel(prev_clicks, next_clicks, current_index):
+    ctx = callback_context.triggered[0]['prop_id']
+    # Total slides: 1 (Intro) + 6 (Clusters) + 1 (Synthesis) = 8
+    total_slides = 8
+    
+    if 'analytics-prev' in ctx:
+        return (current_index - 1) % total_slides
+    elif 'analytics-next' in ctx:
+        return (current_index + 1) % total_slides
+    return current_index
+
+@app.callback(
     Output('kpi-latest', 'children'),
     Output('kpi-quarterly', 'children'),
     Output('kpi-annual', 'children'),
@@ -475,6 +535,7 @@ def update_ui_language(lang):
     Output('comparison-header', 'children'),
     Output('trend-header', 'children'),
     Output('analytics-report-container', 'children'),
+    Output('analytics-progress', 'children'),
     Input('province-dropdown', 'value'),
     Input('salary-type-radio', 'value'),
     Input('adjustment-toggle', 'value'),
@@ -484,13 +545,14 @@ def update_ui_language(lang):
     Input('date-picker-range', 'start_date'),
     Input('date-picker-range', 'end_date'),
     Input('comparison-month-dropdown', 'value'),
+    Input('analytics-carousel-index', 'data'),
     Input('lang-store', 'data')
 )
-def update_dashboard(selected_province, salary_type, adjustments, ref_line_col, infl_cat, base_date, start_date, end_date, comp_month_idx, lang):
+def update_dashboard(selected_province, salary_type, adjustments, ref_line_col, infl_cat, base_date, start_date, end_date, comp_month_idx, carousel_idx, lang):
     t = TRANSLATIONS[lang]
     
-    # 0. Guards for None values (common during component init or language change)
-    if any(v is None for v in [selected_province, salary_type, adjustments, infl_cat, base_date, start_date, end_date, comp_month_idx]):
+    # 0. Guards for None values
+    if any(v is None for v in [selected_province, salary_type, adjustments, infl_cat, base_date, start_date, end_date, comp_month_idx, carousel_idx]):
         return no_update
     
     # Fallback for ref_line_col if it's missing but needed
@@ -642,8 +704,8 @@ def update_dashboard(selected_province, salary_type, adjustments, ref_line_col, 
 
     comp_header = f"{t['comp_header_prefix']} ({comp_date.strftime('%Y-%m')})"
     
-    # Cluster Analysis Report Deep Dive
-    report_content = []
+    # Cluster Analysis Carousel Logic
+    all_slides = []
     
     if HAS_ANALYTICS:
         df_long_c = df_real_filt.T.reset_index().rename(columns={df_real_filt.T.reset_index().columns[0]: 'province'})
@@ -651,46 +713,94 @@ def update_dashboard(selected_province, salary_type, adjustments, ref_line_col, 
         df_long_c['date'] = pd.to_datetime(df_long_c['date'])
         df_long_c['cluster'] = df_long_c['cluster'].astype(str)
 
-        # Narrative Report Deep Dive
-        if REPORT_SECTIONS["intro"]:
-            report_content.append(dbc.Card([
-                dbc.CardBody(dcc.Markdown(REPORT_SECTIONS["intro"]))
+        lang_report = REPORT_SECTIONS.get(lang, REPORT_SECTIONS["en"])
+
+        # Slide 0: Introduction
+        if lang_report["intro"]:
+            all_slides.append(dbc.Card([
+                dbc.CardHeader("Introduction" if lang == 'en' else "Introducción", className="fw-bold bg-light"),
+                dbc.CardBody(dcc.Markdown(lang_report["intro"], dangerously_allow_html=True, className="markdown-report"))
             ], className="mb-4 shadow-sm"))
             
-            for i, section_text in enumerate(REPORT_SECTIONS["clusters"]):
-                # Create a specific plot for this cluster section
-                df_cls = df_long_c[df_long_c['cluster'] == str(i)]
-                fig_cls_small = px.line(df_cls, x='date', y='real_salary', color='province',
-                                       title=f"Cluster {i} Detail", template='plotly_white', height=400)
-                
-                # Refine Plot Style
-                fig_cls_small.update_layout(
-                    legend_title_text=None, # Remove 'province' from legend
-                    margin=dict(l=40, r=20, t=40, b=40),
-                    xaxis_title=t['date_range'].replace(':', ''),
-                    yaxis_title="Salario Real" if lang == 'es' else "Real Salary"
-                )
-                
-                # Card for Text
-                report_content.append(dbc.Card([
-                    dbc.CardHeader(f"Deep Dive: Cluster {i}", className="fw-bold bg-light"),
-                    dbc.CardBody(dcc.Markdown(section_text))
-                ], className="mb-3 shadow-sm"))
-                
-                # Card for Plot
-                report_content.append(dbc.Card([
-                    dbc.CardBody(dcc.Graph(figure=fig_cls_small, config={'displayModeBar': False}))
-                ], className="mb-4 shadow-sm"))
-            
-            if REPORT_SECTIONS["synthesis"]:
-                report_content.append(dbc.Card([
-                    dbc.CardHeader("Synthesis & Future Outlook", className="fw-bold bg-dark text-white"),
-                    dbc.CardBody(dcc.Markdown(REPORT_SECTIONS["synthesis"]))
-                ], className="mb-4 shadow-sm"))
-    else:
-        report_content = [html.P(t['no_analytics'], className="text-center mt-5")]
+        # Slides 1-6: Clusters
+        for i, section_text in enumerate(lang_report["clusters"]):
+            title_match = re.search(r'## \*\*Cluster \d: (.*?)\*\*', section_text)
+            display_idx = i + 1
+            if title_match:
+                card_title = f"Cluster {display_idx}: {title_match.group(1)}"
+                body_text = re.sub(r'## \*\*Cluster \d:.*?\*\*', '', section_text).strip()
+            else:
+                card_title = f"Deep Dive: Cluster {display_idx}" if lang == 'en' else f"Análisis: Cluster {display_idx}"
+                body_text = section_text
 
-    return kpi_latest, kpi_q, kpi_a, kpi_i, fig_hist, fig_comp, comp_header, trend_title, report_content
+            df_cls = df_long_c[df_long_c['cluster'] == str(i)]
+            
+            # --- Analytics Plot Filter Logic ---
+            y_val_col = 'real_salary'
+            y_axis_title = "Salario Real" if lang == 'es' else "Real Salary"
+            
+            if is_base100:
+                # Calculate index relative to 2016-12 for this cluster
+                base_vals = df_cls[df_cls['date'] == START_LIMIT].set_index('province')['real_salary']
+                df_cls = df_cls.copy()
+                df_cls['index_val'] = df_cls.apply(lambda row: (row['real_salary'] / base_vals.get(row['province'], 1)) * 100, axis=1)
+                y_val_col = 'index_val'
+                y_axis_title = t['xaxis_index']
+            elif not show_real:
+                # Nominal: we need to join back with nominal data
+                df_nom_long = df_nom_filt.reset_index().melt(id_vars='date', var_name='province', value_name='nom_salary')
+                df_cls = df_cls.merge(df_nom_long, on=['date', 'province'])
+                y_val_col = 'nom_salary'
+                y_axis_title = t['xaxis_salary']
+
+            fig_cls_small = px.line(df_cls, x='date', y=y_val_col, color='province',
+                                   title=f"{card_title} - {t['tab_analytics']}", template='plotly_white', height=400)
+            
+            fig_cls_small.update_layout(
+                legend_title_text=None,
+                margin=dict(l=40, r=20, t=40, b=40),
+                xaxis_title=t['date_range'].replace(':', ''),
+                yaxis_title=y_axis_title
+            )
+            
+            all_slides.append(html.Div([
+                dbc.Card([
+                    dbc.CardHeader(card_title, className="fw-bold bg-light"),
+                    dbc.CardBody(dcc.Markdown(body_text, dangerously_allow_html=True, className="markdown-report"))
+                ], className="mb-3 shadow-sm"),
+                dbc.Card([
+                    dbc.CardBody(dcc.Graph(figure=fig_cls_small, config={'displayModeBar': False}))
+                ], className="mb-4 shadow-sm")
+            ]))
+        
+        # Final Slide: Synthesis
+        if lang_report["synthesis"]:
+            s_text = lang_report["synthesis"]
+            s_title_match = re.search(r'## \*\*Synthesis and Future Outlook: (.*?)\*\*', s_text)
+            if not s_title_match:
+                # Try Spanish header
+                s_title_match = re.search(r'## \*\*Síntesis y Perspectivas Futuras: (.*?)\*\*', s_text)
+
+            if s_title_match:
+                s_card_title = f"{'Synthesis' if lang == 'en' else 'Síntesis'}: {s_title_match.group(1)}"
+                s_body_text = re.sub(r'## \*\*(Synthesis and Future Outlook|Síntesis y Perspectivas Futuras):.*?\*\*', '', s_text).strip()
+            else:
+                s_card_title = "Synthesis & Future Outlook" if lang == 'en' else "Síntesis y Perspectivas Futuras"
+                s_body_text = s_text
+
+            all_slides.append(dbc.Card([
+                dbc.CardHeader(s_card_title, className="fw-bold bg-dark text-white"),
+                dbc.CardBody(dcc.Markdown(s_body_text, dangerously_allow_html=True, className="markdown-report"))
+            ], className="mb-4 shadow-sm"))
+    else:
+        all_slides = [html.P(t['no_analytics'], className="text-center mt-5")]
+
+    # Select the current slide based on index
+    active_idx = min(max(0, carousel_idx), len(all_slides) - 1)
+    report_content = all_slides[active_idx]
+    progress_label = f"{active_idx + 1} / {len(all_slides)}"
+
+    return kpi_latest, kpi_q, kpi_a, kpi_i, fig_hist, fig_comp, comp_header, trend_title, report_content, progress_label
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8050, debug=True)
