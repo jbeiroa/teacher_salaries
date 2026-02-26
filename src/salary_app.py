@@ -34,9 +34,24 @@ def process_citations(text):
     return text
 
 def parse_report(path, lang):
-    if not os.path.exists(path):
+    # Check both current working directory and relative to this file's location
+    # (to support running from root or from src/)
+    possible_paths = [
+        os.path.join(os.getcwd(), path),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), path)
+    ]
+    
+    final_path = None
+    for p in possible_paths:
+        if os.path.exists(p):
+            final_path = p
+            break
+            
+    if not final_path:
+        print(f"Warning: Report not found at {path} in any of {possible_paths}")
         return
-    with open(path, "r") as f:
+        
+    with open(final_path, "r") as f:
         content = f.read()
         sections = re.split(r'\n(?=## \*\*)', content)
         intro_parts = []
@@ -796,9 +811,13 @@ def update_dashboard(selected_province, salary_type, adjustments, ref_line_col, 
         all_slides = [html.P(t['no_analytics'], className="text-center mt-5")]
 
     # Select the current slide based on index
-    active_idx = min(max(0, carousel_idx), len(all_slides) - 1)
-    report_content = all_slides[active_idx]
-    progress_label = f"{active_idx + 1} / {len(all_slides)}"
+    if not all_slides:
+        report_content = html.Div(t['no_analytics'], className="text-center mt-5")
+        progress_label = "0 / 0"
+    else:
+        active_idx = min(max(0, carousel_idx), len(all_slides) - 1)
+        report_content = all_slides[active_idx]
+        progress_label = f"{active_idx + 1} / {len(all_slides)}"
 
     return kpi_latest, kpi_q, kpi_a, kpi_i, fig_hist, fig_comp, comp_header, trend_title, report_content, progress_label
 

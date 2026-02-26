@@ -11,9 +11,17 @@ class AnalyticsPipeline:
     def __init__(self, experiment_name="Teacher_Salaries_Analytics", db_uri="sqlite:///mlflow.db"):
         self.experiment_name = experiment_name
         self.db_uri = db_uri
-        mlflow.set_tracking_uri(self.db_uri)
-        mlflow.set_experiment(self.experiment_name)
+        self._mlflow_initialized = False
     
+    def _init_mlflow(self):
+        """Lazy initialization for MLflow to avoid side effects if not needed."""
+        if not self._mlflow_initialized:
+            import mlflow
+            import mlflow.sklearn
+            mlflow.set_tracking_uri(self.db_uri)
+            mlflow.set_experiment(self.experiment_name)
+            self._mlflow_initialized = True
+
     def prepare_data(self, df_real):
         """Prepare data for clustering by scaling."""
         # df_real: Index = Dates, Columns = Provinces
@@ -48,6 +56,9 @@ class AnalyticsPipeline:
     
     def run_pipeline(self, df_real, n_clusters=6):
         """Run the full pipeline and log to MLflow."""
+        self._init_mlflow()
+        import mlflow
+        import mlflow.sklearn
         with mlflow.start_run(run_name="Production_Pipeline") as run:
             print(f"Started run: {run.info.run_id}")
             
@@ -63,10 +74,13 @@ class AnalyticsPipeline:
             df_anomalies_long = df_anomalies.reset_index().melt(id_vars='index', var_name='province', value_name='anomaly')
             df_anomalies_long.rename(columns={'index': 'date'}, inplace=True)
             
-            # Save artifacts
-            os.makedirs("artifacts", exist_ok=True)
-            clusters_path = "artifacts/clusters.parquet"
-            anomalies_path = "artifacts/anomalies.parquet"
+            # Save artifacts in the project root (relative to this file: src/salary_data/analytics.py)
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            artifacts_dir = os.path.join(base_dir, "artifacts")
+            os.makedirs(artifacts_dir, exist_ok=True)
+            
+            clusters_path = os.path.join(artifacts_dir, "clusters.parquet")
+            anomalies_path = os.path.join(artifacts_dir, "anomalies.parquet")
             
             df_clusters.to_parquet(clusters_path, index=False)
             df_anomalies_long.to_parquet(anomalies_path, index=False)
@@ -94,24 +108,39 @@ class AnalyticsPipeline:
         
         # 1. Try local files first (Production/Bundle approach)
         if local_first:
-            clusters_path = "artifacts/clusters.parquet"
-            anomalies_path = "artifacts/anomalies.parquet"
+            # We check two locations:
+            # a) Current working directory (standard)
+            # b) Parent of src/ (to be robust against running from src/)
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             
-            if os.path.exists(clusters_path) and os.path.exists(anomalies_path):
-                try:
-                    df_clusters = pd.read_parquet(clusters_path)
-                    df_anomalies = pd.read_parquet(anomalies_path)
-                    print(f"Loaded artifacts from local storage: {clusters_path}")
-                    return df_clusters, df_anomalies
-                except Exception as e:
-                    print(f"Error loading local artifacts: {e}. Falling back to MLflow...")
+            paths_to_try = [
+                os.path.join(os.getcwd(), "artifacts"),
+                os.path.join(base_dir, "artifacts")
+            ]
+            
+            for artifacts_dir in paths_to_try:
+                clusters_path = os.path.join(artifacts_dir, "clusters.parquet")
+                anomalies_path = os.path.join(artifacts_dir, "anomalies.parquet")
+                
+                if os.path.exists(clusters_path) and os.path.exists(anomalies_path):
+                    try:
+                        df_clusters = pd.read_parquet(clusters_path)
+                        df_anomalies = pd.read_parquet(anomalies_path)
+                        print(f"Loaded artifacts from: {clusters_path}")
+                        return df_clusters, df_anomalies
+                    except Exception as e:
+                        print(f"Error loading artifacts from {clusters_path}: {e}")
+            
+            # Note: No print here to avoid noise in production if artifacts aren't strictly required
+            # but usually they are for the advanced analytics tab to work.
 
         # 2. Fallback to MLflow (Development approach)
+        self._init_mlflow()
+        import mlflow
         client = mlflow.tracking.MlflowClient(self.db_uri)
         try:
             experiment = client.get_experiment_by_name(self.experiment_name)
             if not experiment:
-                print("MLflow experiment not found.")
                 return None, None
             
             runs = client.search_runs(
@@ -121,7 +150,6 @@ class AnalyticsPipeline:
             )
             
             if not runs:
-                print("No MLflow runs found.")
                 return None, None
                 
             latest_run = runs[0]
@@ -137,5 +165,4 @@ class AnalyticsPipeline:
             print(f"Loaded artifacts from MLflow run: {run_id}")
             return df_clusters, df_anomalies
         except Exception as e:
-            print(f"Could not load artifacts from any source: {e}")
             return None, None
