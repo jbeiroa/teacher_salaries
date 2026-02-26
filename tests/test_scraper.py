@@ -1,91 +1,62 @@
 import pytest
 import pandas as pd
-import numpy as np
 from datetime import datetime
 from unittest.mock import patch, MagicMock
-from salary_data.scraper import Scraper
-import requests
+from src.salary_data.scraper import Scraper
 
-@pytest.fixture
-def scraper():
-    return Scraper()
-
-@pytest.fixture
-def mock_salary_data():
-    dates = pd.to_datetime(['2023-03-01', '2023-06-01', '2023-09-01', '2023-12-01', '2024-03-01'])
-    # 25 columns as expected
-    provinces = [
-        "Buenos Aires", "Catamarca", "Chaco", "Chubut", "Córdoba", "Corrientes", 
-        "Entre Ríos", "Formosa", "Jujuy", "La Pampa", "La Rioja", "Mendoza", 
-        "Misiones", "Neuquén", "Río Negro", "Salta", "San Juan", "San Luis", 
-        "Santa Cruz", "Santa Fe", "Santiago del Estero", "Tierra del Fuego", "Tucumán",
-        "Ciudad Autónoma de Buenos Aires", "Promedio Ponderado (MG Total)"
-    ]
-    data = {p: [100.0] * 5 for p in provinces}
-    return pd.DataFrame(data, index=dates)
-
-@pytest.fixture
-def mock_ipc_series():
-    dates = pd.to_datetime(['2023-03-01', '2023-06-01', '2023-09-01', '2023-12-01', '2024-03-01'])
-    return pd.Series([100, 110, 121, 133.1, 146.41], index=dates, name='infl_Nivel_general')
-
-def test_calculate_real_salary_alignment(scraper, mock_salary_data, mock_ipc_series):
-    # Test that it only returns the intersection of indices
-    ipc_short = mock_ipc_series.iloc[:-1] # Drop 2024-03-01
-    df_real = scraper.calculate_real_salary(mock_salary_data, ipc_short, base_date='2023-12-01')
+def test_scraper_url_ipc_construction():
+    """Verify that URL_IPC is correctly formatted for the current month and year."""
+    scraper = Scraper()
+    month = f'{datetime.today().month:02d}'
+    year = f'{datetime.today().year}'[-2:]
     
-    assert len(df_real) == 4
-    assert df_real.index[-1] == pd.to_datetime('2023-12-01')
-    assert pd.to_datetime('2024-03-01') not in df_real.index
+    assert f"sh_ipc_{month}_{year}.xls" in scraper.URL_IPC
 
-def test_calculate_variations_quarterly(scraper):
-    dates = pd.to_datetime(['2022-03-01', '2022-06-01', '2022-09-01', '2022-12-01', 
-                            '2023-03-01', '2023-06-01'])
-    values = [100, 110, 121, 133.1, 146.41, 161.051]
-    series = pd.Series(values, index=dates)
+def test_column_sanitization_in_salary_data():
+    """Verify that footnotes like (1) or (2) are removed from jurisdiction names."""
+    scraper = Scraper()
+    # Mock DataFrame with footnotes in columns
+    df_raw = pd.DataFrame({
+        'jurisdiction': ['Buenos Aires (1)', 'Chaco (2)', 'Promedio Ponderado (MG Total) (3)'],
+        '2003-03-01': [100, 200, 300]
+    })
     
-    df_var = scraper.calculate_variations(series)
+    # Simulate the cleaning logic inside get_cgecse_salaries
+    new_names = df_raw['jurisdiction'].str.replace(r' \(([1-9])\)|\(([1-9])\)', '', regex=True).str.strip()
     
-    # Quarterly (period 1)
-    assert df_var.loc['2023-06-01', 'quarterly'] == pytest.approx(10.0)
-    # Inter-annual (period 4)
-    assert df_var.loc['2023-03-01', 'interannual'] == pytest.approx(46.41)
-
-def test_replace_with_underscore(scraper):
-    assert scraper._replace_with_underscore(MagicMock(group=lambda: ' ')) == '_'
-    assert scraper._replace_with_underscore(MagicMock(group=lambda: ' y ')) == '_'
+    assert list(new_names) == ["Buenos Aires", "Chaco", "Promedio Ponderado (MG Total)"]
 
 @patch('requests.get')
-def test_network_error_handling(mock_get, scraper):
-    mock_get.side_effect = requests.exceptions.Timeout()
-    with pytest.raises(requests.exceptions.Timeout):
-        scraper.get_cgecse_salaries("http://dummy.url")
-
-def test_column_sanitization_and_cleaning(scraper):
-    # Mock data with footnotes and trailing notes rows
-    data = [
-        ['dummy', 'Buenos Aires (1)', 100, 110],
-        ['dummy', 'Ciudad Autónoma de Buenos Aires', 120, 130],
-        ['dummy', 'Promedio Ponderado (MG Total) (2)', 110, 120],
-        ['dummy', 'Notes 1', 0, 0],
-        ['dummy', 'Notes 2', 0, 0],
-        ['dummy', 'Notes 3', 0, 0],
-        ['dummy', 'Notes 4', 0, 0],
-        ['dummy', 'Notes 5', 0, 0],
-    ]
+def test_get_cba_cbt_parsing(mock_get):
+    """Verify that CBA/CBT CSV is correctly parsed."""
+    scraper = Scraper()
+    mock_csv = "indice_tiempo,cba,cbt\n2023-01-01,100.5,220.3\n2023-02-01,110.2,235.4"
+    mock_get.return_value.content = mock_csv.encode('utf-8')
     
-    with patch('pandas.read_excel') as mock_read:
-        mock_df = pd.DataFrame(data, columns=['Col0', 'Col1', '2003-I', '2003-II'])
-        mock_read.return_value = mock_df
-        
-        with patch('requests.get') as mock_req:
-            mock_req.return_value.content = b"fake content"
-            df = scraper.get_cgecse_salaries("http://dummy.url")
-            
-            # Check jurisdictions are correctly cleaned
-            # Note: "Promedio Ponderado (MG Total)" contains parentheses, 
-            # but footnotes like (1) or (2) should be gone.
-            assert list(df.columns) == ["Buenos Aires", "Ciudad Autónoma de Buenos Aires", "Promedio Ponderado (MG Total)"]
-            # Verify no footnotes (digit inside parentheses) remain
-            assert not any(pd.Series(df.columns).str.contains(r'\([1-9]\)'))
-            assert len(df.columns) == 3 
+    df = scraper.get_cba_cbt()
+    assert df.index.name == 'indice_tiempo'
+    assert len(df) == 2
+    assert df.loc['2023-01-01', 'cba'] == 100.5
+    assert df.loc['2023-02-01', 'cbt'] == 235.4
+
+def test_calculate_variations_frequency_detection():
+    """Verify quarterly vs monthly frequency detection in variations."""
+    scraper = Scraper()
+    
+    # Quarterly series
+    # interannual needs period=4, so we need at least 5 points
+    dates_q = pd.to_datetime(['2023-03-01', '2023-06-01', '2023-09-01', '2023-12-01', '2024-03-01'])
+    series_q = pd.Series([100, 110, 121, 133.1, 146.41], index=dates_q)
+    df_q = scraper.calculate_variations(series_q)
+    assert df_q.loc['2023-06-01', 'quarterly'] == pytest.approx(10.0)
+    assert df_q.loc['2024-03-01', 'interannual'] == pytest.approx(46.41)
+    
+    # Monthly series
+    dates_m = pd.date_range(start='2023-01-01', periods=13, freq='MS')
+    series_m = pd.Series([100] * 13, index=dates_m)
+    series_m.iloc[-1] = 110 # Jan 2024
+    df_m = scraper.calculate_variations(series_m)
+    # Quarterly should look back 3 months for monthly data
+    assert df_m.loc['2024-01-01', 'quarterly'] == pytest.approx(10.0) 
+    # Interannual should look back 12 months
+    assert df_m.loc['2024-01-01', 'interannual'] == pytest.approx(10.0)

@@ -1,0 +1,46 @@
+/* Professional Markdown Table Styling */
+.markdown-report table {
+    width: 100%;
+    margin-bottom: 1rem;
+    color: #212529;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.markdown-report table th,
+.markdown-report table td {
+    padding: 0.75rem;
+    vertical-align: top;
+    border-top: 1px solid #dee2e6;
+}
+
+.markdown-report table thead th {
+    vertical-align: bottom;
+    border-bottom: 2px solid #dee2e6;
+    background-color: #f8f9fa;
+    font-weight: bold;
+}
+
+.markdown-report table tbody tr:nth-of-type(odd) {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.markdown-report table tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.075);
+}
+
+/* Citation Styling */
+.markdown-report sup a {
+    text-decoration: none;
+    font-weight: bold;
+    color: #18bc9c; /* Matching FLATLY primary/success color */
+}
+
+.markdown-report sup a:hover {
+    text-decoration: underline;
+}
+
+/* Reference Section Anchor Offset (to account for fixed headers if any) */
+[id^="ref"] {
+    scroll-margin-top: 20px;
+}

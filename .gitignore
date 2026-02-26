@@ -1,4 +1,7 @@
+.mypy_cache/
 .vscode/
 __pycache__/
 .DS_Store
 .ipynb_checkpoints/
+mlruns/
+mlflow.db

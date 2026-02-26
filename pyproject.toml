@@ -20,6 +20,10 @@ gunicorn = "^21.2.0"
 jupyter = "^1.1.1"
 xlrd = "^2.0.1"
 beautifulsoup4 = "^4.12.3"
+tslearn = "^0.8.0"
+scikit-learn = "^1.8.0"
+mlflow = "^3.10.0"
+pyarrow = "^23.0.1"
 
 
 [build-system]
@@ -29,5 +33,6 @@ build-backend = "poetry.core.masonry.api"
 [dependency-groups]
 dev = [
     "pytest (>=9.0.2,<10.0.0)",
-    "pytest-mock (>=3.15.1,<4.0.0)"
+    "pytest-mock (>=3.15.1,<4.0.0)",
+    "kaleido (>=1.2.0,<2.0.0)"
 ]
