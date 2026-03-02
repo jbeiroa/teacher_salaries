@@ -39,13 +39,33 @@ class Scraper():
         self.URL_SUMAS_ADICIONALES = "https://www.argentina.gob.ar/sites/default/files/2022/07/5._sumas_adicionales_25.xlsx"
         
         # IPC URL construction
-        base_ipc_url = 'https://www.indec.gob.ar/ftp/cuadros/economia/sh_ipc_'
-        month = f'{datetime.today().month:02d}'
-        year = f'{datetime.today().year}'[-2:]
-        self.URL_IPC = base_ipc_url + month + '_' + year + '.xls'
+        self.URL_IPC = self._build_ipc_url() 
         
         # CBA/CBT URL from datos.gob.ar
         self.URL_CBA_CBT = 'https://infra.datos.gob.ar/catalog/sspm/dataset/150/distribution/150.1/download/valores-canasta-basica-alimentos-canasta-basica-total-mensual-2016.csv'
+
+    def _build_ipc_url(self):
+        """Constructs the URL for the INDEC IPC data based on the current date.
+
+        The URL follows a specific pattern that includes the month and year of the data.
+
+        Returns:
+            str: The constructed URL for the IPC data.
+        """
+        base_ipc_url = 'https://www.indec.gob.ar/ftp/cuadros/economia/sh_ipc_'
+        month = f'{datetime.today().month:02d}'
+        year = f'{datetime.today().year}'[-2:]
+        _ipc_url = base_ipc_url + month + '_' + year + '.xls'
+        # Test if the URL has an excel file to download
+        headers = req.head(_ipc_url, timeout=5).headers
+        if 'Content-Type' in headers and 'application/vnd.ms-excel' in headers['Content-Type']:
+            return _ipc_url
+        else:
+            # If the current month's data is not available, try the previous month
+            prev_month = datetime.today().month - 1 or 12
+            month = f'{prev_month:02d}'
+            _ipc_url = base_ipc_url + month + '_' + year + '.xls'
+            return _ipc_url
 
     def _replace_with_underscore(self, match):
         """Helper to sanitize column names.
@@ -115,9 +135,9 @@ class Scraper():
         """        
         r = req.get(self.URL_IPC, timeout=10)
         df = pd.read_excel(BytesIO(r.content), 
-                        sheet_name='Índices IPC Cobertura Nacional',
-                        header=5, 
-                        nrows=26)
+                            sheet_name='Índices IPC Cobertura Nacional',
+                            header=5, 
+                            nrows=26)
         df.dropna(inplace=True)
         df = df.T
         df.columns = df.iloc[0]
