@@ -5,9 +5,15 @@ import plotly.express as px
 import plotly.graph_objects as go
 from salary_data.scraper import Scraper
 from salary_data.analytics import AnalyticsPipeline
+from salary_data.agent import DataJournalistAgent
+from salary_data.guardrails import InputValidator
+from components.chat_interface import create_chat_interface, format_message
 from datetime import datetime
+from dotenv import load_dotenv
 import os
 import re
+
+load_dotenv()
 
 # --- Data Loading ---
 scraper = Scraper()
@@ -88,6 +94,20 @@ df_basic_salary = scraper.get_cgecse_salaries(scraper.URL_BASICO).loc[START_LIMI
 df_ipc = scraper.get_ipc_indec().loc[START_LIMIT:]
 
 df_cba_cbt = scraper.get_cba_cbt().loc[START_LIMIT:]
+
+# --- Initialize Agent & Guardrails ---
+agent_dfs = {
+    "net_salaries": df_net_salary,
+    "inflation_ipc": df_ipc,
+    "poverty_lines": df_cba_cbt
+}
+model_params = {
+    "model": "openai/gpt-4o-mini",
+    "temperature": 0.2,
+    "num_retries": 3
+}
+journalist_agent = DataJournalistAgent(agent_dfs, model_params=model_params)
+validator = InputValidator(relevance_model="ollama/llama3.2:1b")
 
 # --- Translations ---
 TRANSLATIONS = {
@@ -295,12 +315,13 @@ def get_variation_metrics(nom_series, real_series, ipc_series):
     }
 
 # --- App Initialization ---
-app = Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
+app = Dash(__name__, external_stylesheets=[dbc.themes.FLATLY, "https://use.fontawesome.com/releases/v5.15.4/css/all.css"])
 server = app.server
 
 # --- Layout ---
 app.layout = dbc.Container([
     dcc.Store(id='lang-store', data='es'),
+    create_chat_interface(), # AI Chat Interface
     dbc.Row([
         dbc.Col([
             dbc.Button("?", id="open-offcanvas", n_clicks=0, color="info", outline=True, size="sm", className="mt-4")
@@ -820,6 +841,115 @@ def update_dashboard(selected_province, salary_type, adjustments, ref_line_col, 
         progress_label = f"{active_idx + 1} / {len(all_slides)}"
 
     return kpi_latest, kpi_q, kpi_a, kpi_i, fig_hist, fig_comp, comp_header, trend_title, report_content, progress_label
+
+# --- Chat & Agent Callbacks ---
+@app.callback(
+    Output("chat-sidebar", "is_open"),
+    Input("open-chat", "n_clicks"),
+    State("chat-sidebar", "is_open"),
+)
+def toggle_chat(n, is_open):
+    if n:
+        return not is_open
+    return is_open
+
+# STAGE 1: Clientside Immediate Feedback
+app.clientside_callback(
+    """
+    function(n_clicks, n_submit, user_input, history) {
+        if ((!n_clicks && !n_submit) || !user_input || user_input.trim() === "") {
+            return [window.dash_clientside.no_update, window.dash_clientside.no_update, window.dash_clientside.no_update, false, false];
+        }
+        const clean = user_input.trim();
+        const new_history = (history || []).concat([
+            {role: 'user', content: clean},
+            {role: 'agent', content: '_THINKING_'}
+        ]);
+        // [history, input_val, pending_query, input_disabled, button_disabled]
+        return [new_history, "", clean, true, true];
+    }
+    """,
+    Output("chat-history-store", "data", allow_duplicate=True),
+    Output("chat-input", "value"),
+    Output("pending-query-store", "data"),
+    Output("chat-input", "disabled"),
+    Output("send-chat", "disabled"),
+    Input("send-chat", "n_clicks"),
+    Input("chat-input", "n_submit"),
+    State("chat-input", "value"),
+    State("chat-history-store", "data"),
+    prevent_initial_call=True
+)
+
+# STAGE 2: Agent Processing (Server-side)
+@app.callback(
+    Output("chat-history-store", "data"),
+    Output("pending-query-store", "data", allow_duplicate=True),
+    Output("chat-input", "disabled", allow_duplicate=True),
+    Output("send-chat", "disabled", allow_duplicate=True),
+    Input("pending-query-store", "data"),
+    State("chat-history-store", "data"),
+    State("province-dropdown", "value"),
+    State("salary-type-radio", "value"),
+    State("date-picker-range", "start_date"),
+    State("date-picker-range", "end_date"),
+    State("lang-store", "data"),
+    prevent_initial_call=True
+)
+def run_agent_process(query, history, province, s_type, start, end, lang):
+    if query is None:
+        return no_update, no_update, False, False
+    
+    # --- Guardrail Check ---
+    is_valid, error_msg = validator.validate(query)
+    if not is_valid:
+        if history and history[-1]['content'] == "_THINKING_":
+            history[-1]['content'] = error_msg
+        return history, None, False, False
+
+    # --- Agent Execution ---
+    context = {
+        "selected_province": province,
+        "salary_type": s_type,
+        "visible_date_range": f"{start} to {end}",
+        "language_preference": lang
+    }
+    
+    try:
+        # History excluding the _THINKING_ placeholder
+        response = journalist_agent.query(query, context_metadata=context, chat_history=history[:-1])
+        ans = response.get("output", "I'm sorry, I couldn't process that.")
+    except Exception as e:
+        ans = f"Error: {str(e)}"
+    
+    if history and history[-1]['content'] == "_THINKING_":
+        history[-1]['content'] = ans
+    
+    # Return updated history, clear pending query, and RE-ENABLE inputs
+    return history, None, False, False
+
+# STAGE 3: Render UI
+@app.callback(
+    Output("chat-history", "children"),
+    Input("chat-history-store", "data"),
+)
+def render_chat(history):
+    if not history:
+        return []
+    return [format_message(m) for m in history]
+
+@app.callback(
+    Output("download-summary-data", "data"),
+    Input("download-summary-btn", "n_clicks"),
+    State("lang-store", "data"),
+    prevent_initial_call=True
+)
+def download_summary(n_clicks, lang):
+    if n_clicks:
+        summary_md = journalist_agent.generate_executive_summary(lang=lang)
+        filename = f"executive_summary_{datetime.now().strftime('%Y%m%d')}.md"
+        return dcc.send_string(summary_md, filename)
+    return no_update
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8050, debug=True)

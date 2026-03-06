@@ -57,9 +57,7 @@ def run_evaluation():
     # 3. Models to Evaluate
     models = [
         {"model": "openai/gpt-4o-mini"},
-        {"model": "ollama/qwen3.5:9b", "base_url": "http://localhost:11434"},
-        {"model": "ollama/qwen3.5:4b", "base_url": "http://localhost:11434"},
-        {"model": "ollama/llama3.2:3b", "base_url": "http://localhost:11434"}
+        {"model": "ollama/qwen3.5:9b", "base_url": "http://localhost:11434"}
     ]
 
     mlflow.set_experiment("Agent_Comparison_March_2026")

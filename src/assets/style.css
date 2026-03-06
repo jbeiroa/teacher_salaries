@@ -1,46 +1,31 @@
-/* Professional Markdown Table Styling */
-.markdown-report table {
-    width: 100%;
-    margin-bottom: 1rem;
-    color: #212529;
-    border-collapse: collapse;
-    font-size: 0.9rem;
+/* Chat Thinking Animation */
+.thinking-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #6c757d;
+    margin: 0 2px;
+    animation: thinking-bounce 1.4s infinite ease-in-out both;
 }
 
-.markdown-report table th,
-.markdown-report table td {
-    padding: 0.75rem;
-    vertical-align: top;
-    border-top: 1px solid #dee2e6;
+.thinking-dot:nth-child(1) { animation-delay: -0.32s; }
+.thinking-dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes thinking-bounce {
+    0%, 80%, 100% { transform: scale(0); }
+    40% { transform: scale(1.0); }
 }
 
-.markdown-report table thead th {
-    vertical-align: bottom;
-    border-bottom: 2px solid #dee2e6;
-    background-color: #f8f9fa;
-    font-weight: bold;
+.thinking-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 20px;
+    padding: 5px 0;
 }
 
-.markdown-report table tbody tr:nth-of-type(odd) {
-    background-color: rgba(0, 0, 0, 0.05);
-}
-
-.markdown-report table tbody tr:hover {
-    background-color: rgba(0, 0, 0, 0.075);
-}
-
-/* Citation Styling */
-.markdown-report sup a {
-    text-decoration: none;
-    font-weight: bold;
-    color: #18bc9c; /* Matching FLATLY primary/success color */
-}
-
-.markdown-report sup a:hover {
-    text-decoration: underline;
-}
-
-/* Reference Section Anchor Offset (to account for fixed headers if any) */
-[id^="ref"] {
-    scroll-margin-top: 20px;
+/* Chat bubble transitions */
+.chat-bubble {
+    transition: all 0.3s ease;
 }
