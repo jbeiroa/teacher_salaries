@@ -10,21 +10,37 @@ import numpy as np
 import mlflow
 import re
 
+import json
+
 # --- Tool Input Schemas ---
 
 class ProvinceSalaryInput(BaseModel):
-    province: str = Field(description="Name of the province. DO NOT include quotes.")
+    province: str = Field(description="Name of the province.")
     period: Optional[str] = Field(None, description="Period in YYYY-MM-DD format. If None, uses latest.")
 
 class PurchasingPowerLossInput(BaseModel):
     start_date: str = Field(description="Start date in YYYY-MM-DD format")
     end_date: str = Field(description="End date in YYYY-MM-DD format")
     province: Optional[str] = Field(None, description="Province name. If omitted, returns all provinces.")
+    k: Optional[int] = Field(None, description="Number of results to return if ranking all provinces.")
+    most_loss: bool = Field(True, description="If True, returns provinces that lost the most. If False, returns those that gained/lost the least.")
 
 class TopKProvincesInput(BaseModel):
     k: int = Field(description="Number of provinces to return in the ranking")
     period: str = Field(description="Target period in YYYY-mm format")
-    asc: bool = Field(False, description="True for bottom-paying ranking, False for top-paying ranking")
+    asc: bool = Field(False, description="True for bottom-paying ranking (lowest nominal salary), False for top-paying ranking (highest nominal salary)")
+
+def _parse_input(input_val: any, target_key: str) -> any:
+    """Helper to handle cases where LLM passes a JSON string instead of unpacked args."""
+    if isinstance(input_val, str):
+        cleaned = input_val.strip(" '\"[]")
+        if cleaned.startswith("{") and cleaned.endswith("}"):
+            try:
+                data = json.loads(cleaned)
+                return data.get(target_key, cleaned)
+            except:
+                return cleaned
+    return input_val
 
 class DataJournalistAgent:
     def __init__(self, dfs_dict: dict[str, pd.DataFrame], model_params=None):
@@ -63,43 +79,80 @@ class DataJournalistAgent:
         def get_province_salary(province: str, period: str = None) -> str:
             """Get the nominal salary for a SPECIFIC province. Use this for single-province lookups."""
             try:
+                province = _parse_input(province, "province")
                 province = province.strip(" '\"[]")
                 available = df_net.index
-                if period and str(period).lower() != "none":
-                    tgt = pd.to_datetime(str(period).strip(" '\"[]"))
+                
+                period_val = _parse_input(period, "period") if period else None
+                if period_val and str(period_val).lower() != "none":
+                    tgt = pd.to_datetime(str(period_val).strip(" '\"[]"))
                     closest = available[available <= tgt].max()
                 else:
                     closest = available.max()
+                
+                if province not in df_net.columns:
+                    return f"Error: Province '{province}' not found. Available: {', '.join(df_net.columns)}"
+                    
                 val = df_net.loc[closest, province]
                 return f"Nominal salary for {province} in {closest.strftime('%Y-%m')}: ${val:,.2f}"
             except Exception as e:
                 return f"Error: {e}. Ensure province name is correct."
 
         @tool("calculate_purchasing_power_loss", args_schema=PurchasingPowerLossInput)
-        def calculate_purchasing_power_loss(start_date: str, end_date: str, province: str = None) -> str:
-            """Calculates % change in real salary (purchasing power) between two dates."""
+        def calculate_purchasing_power_loss(start_date: str, end_date: str, province: str = None, k: int = None, most_loss: bool = True) -> str:
+            """Calculates % change in real salary (purchasing power) between two dates. 
+            Use this for ALL questions about EVOLUTION, LOSS, GAIN, or RANKING BY CHANGE over time."""
             try:
                 df_real = self.dfs_dict['real_salaries']
-                s_d = str(start_date).strip(" '\"[]"); e_d = str(end_date).strip(" '\"[]")
-                if province and str(province).lower() != "none":
-                    prov = str(province).strip(" '\"[]")
-                    loss = (df_real.loc[e_d, prov] / df_real.loc[s_d, prov] - 1) * 100
-                    return f"Purchasing power change for {prov} ({s_d} to {e_d}): {loss:+.2f}%"
+                s_d = _parse_input(start_date, "start_date")
+                e_d = _parse_input(end_date, "end_date")
+                prov = _parse_input(province, "province") if province else None
+                k_val = _parse_input(k, "k") if k else None
+                most_loss_val = _parse_input(most_loss, "most_loss")
+                
+                s_d = str(s_d).strip(" '\"[]")
+                e_d = str(e_d).strip(" '\"[]")
+                
+                # Align dates to available indices
+                available = df_real.index
+                s_date = available[available >= pd.to_datetime(s_d)].min()
+                e_date = available[available <= pd.to_datetime(e_d)].max()
+
+                if prov and str(prov).lower() != "none":
+                    prov = str(prov).strip(" '\"[]")
+                    loss = (df_real.loc[e_date, prov] / df_real.loc[s_date, prov] - 1) * 100
+                    return f"Purchasing power change for {prov} ({s_date.strftime('%Y-%m')} to {e_date.strftime('%Y-%m')}): {loss:+.2f}%"
                 else:
-                    loss_all = (df_real.loc[e_d] / df_real.loc[s_d] - 1) * 100
-                    return f"Purchasing power change for all provinces:\n{loss_all.to_string()}"
+                    loss_all = (df_real.loc[e_date] / df_real.loc[s_date] - 1) * 100
+                    loss_all = loss_all[loss_all.index != 'Promedio Ponderado (MG Total)']
+                    
+                    if k_val:
+                        # Sort: If most_loss is True, we want the lowest % changes (most negative) at the top.
+                        sorted_loss = loss_all.sort_values(ascending=bool(most_loss_val))
+                        top_k = sorted_loss.head(int(k_val))
+                        res = f"{'Worst' if most_loss_val else 'Best'} {k_val} provinces in purchasing power change ({s_date.strftime('%Y-%m')} to {e_date.strftime('%Y-%m')}):\n"
+                        for p, v in top_k.items(): res += f"- {p}: {v:+.2f}%\n"
+                        return res
+                    
+                    return f"Purchasing power change for all provinces ({s_date.strftime('%Y-%m')} to {e_date.strftime('%Y-%m')}):\n{loss_all.to_string()}"
             except Exception as e: return f"Error: {e}."
 
         @tool("get_ranking_top_k", args_schema=TopKProvincesInput)
         def get_ranking_top_k(k: int, period: str, asc: bool = False) -> str:
-            """Returns a RANKED LIST of provinces. Use ONLY for comparisons like 'Who pays more?'."""
+            """Returns a RANKED LIST of provinces by NOMINAL salary at a SINGLE POINT IN TIME. 
+            Use ONLY for 'Who pays more/less RIGHT NOW?' questions. 
+            DO NOT use for 'Who lost/gained more?' (use calculate_purchasing_power_loss instead)."""
             try:
-                tgt = pd.to_datetime(str(period).strip(" '\"[]")); available = df_net.index
+                k_val = _parse_input(k, "k")
+                period_val = _parse_input(period, "period")
+                asc_val = _parse_input(asc, "asc")
+                
+                tgt = pd.to_datetime(str(period_val).strip(" '\"[]")); available = df_net.index
                 closest = available[available <= tgt].max()
-                salaries = df_net.loc[closest].sort_values(ascending=asc)
+                salaries = df_net.loc[closest].sort_values(ascending=bool(asc_val))
                 salaries = salaries[salaries.index != 'Promedio Ponderado (MG Total)']
-                top_k = salaries.head(int(k))
-                res = f"{'Bottom' if asc else 'Top'} {k} provinces in {closest.strftime('%Y-%m')}:\n"
+                top_k = salaries.head(int(k_val))
+                res = f"{'Bottom' if asc_val else 'Top'} {k_val} provinces in {closest.strftime('%Y-%m')}:\n"
                 for prov, val in top_k.items(): res += f"- {prov}: ${val:,.2f}\n"
                 return res
             except Exception as e: return f"Error: {e}."
@@ -110,45 +163,104 @@ class DataJournalistAgent:
         date_max = self.dfs_dict['nominal_salaries'].index.max().strftime('%Y-%m-%d')
         
         prefix = f"""
-You are a professional Argentinian Data Journalist. 
-Your goal is to provide direct, data-driven answers that are complete yet concise.
+You are "Lia", the AI Data Journalist for the Teacher Salaries Dashboard.
+Your persona is professional, helpful, and data-driven. 
 
-STRICT FORMATTING RULE:
-Every response MUST follow this exact structure:
-Thought: [Your internal reasoning]
-Action: [Tool name]
-Action Input: {{{{ "arg1": "val1" }}}} <-- VALID JSON
-Observation: [Tool result]
-...
-Final Answer: [Direct response]
+IDENTITY & CONTEXT:
+- If asked "Who are you?" or "What can you do?", explain that you are an assistant designed to analyze Argentinian teacher salaries, inflation, and provincial data using the dashboard's datasets.
+- Always be polite and professional.
 
 TOOL SELECTION RULES:
-1. For questions about a SINGLE province, use 'get_province_salary'.
-2. For questions about LOSS, GAIN, or EVOLUTION, use 'calculate_purchasing_power_loss'.
-3. For questions asking for a RANKING, TOP, or BOTTOM list, use 'get_ranking_top_k'.
+1. FOR EVOLUTION / CHANGE OVER TIME: Always use 'calculate_purchasing_power_loss'. This includes questions like "Who lost the most?", "Ranking of loss", "Evolution since X".
+2. FOR SNAPSHOTS / CURRENT STATE: Use 'get_ranking_top_k' only to compare salaries at a single point in time (e.g., "highest salary in Jan 2024").
+3. FOR SINGLE PROVINCE: Use 'get_province_salary'.
+
+LANGUAGE & OUTPUT RULES:
+1. RESPONSE LANGUAGE: Match the user's language (Spanish for Spanish, English for English).
+2. DATE CLARITY: ALWAYS mention the exact date range (YYYY-MM) in your final answer.
+3. RELATIVE DATES: Treat "last year" or "last X years" relative to the "Latest Data Point Available" provided in the context.
+4. COMPLETE SENTENCES: Always include the DATA (numbers/percentages) in a natural sentence. 
+5. PERCENTAGES: When discussing loss or gain, ALWAYS include the percentage (%) provided by the tool.
+
+BEHAVIORAL RULES:
+1. For general conversation or identity questions, respond DIRECTLY without using tools.
+2. For data-related questions, use the appropriate tool.
+3. ALWAYS provide a clear, conversational answer to the user.
 
 DATA SPECS:
 - Range: {date_min} to {date_max}.
 - Provinces: {", ".join(provinces)}
 """
-        agent = create_pandas_dataframe_agent(llm, df_list, verbose=True, allow_dangerous_code=True, prefix=prefix, max_iterations=15, extra_tools=custom_tools, include_df_in_prompt=True, number_of_head_rows=2)
+        agent = create_pandas_dataframe_agent(
+            llm, 
+            df_list, 
+            verbose=True, 
+            allow_dangerous_code=True, 
+            prefix=prefix, 
+            max_iterations=15, 
+            extra_tools=custom_tools, 
+            include_df_in_prompt=True, 
+            number_of_head_rows=2,
+            agent_type="tool-calling"
+        )
         return agent
 
+
     def query(self, user_prompt: str, context_metadata: dict = None, chat_history: list = None):
+        import datetime
+        now = datetime.datetime.now().strftime('%Y-%m-%d')
+        date_max = self.dfs_dict['nominal_salaries'].index.max().strftime('%Y-%m-%d')
+        
         metadata_block = f"DASHBOARD FILTERS: {context_metadata}" if context_metadata else ""
+        lang = context_metadata.get('language_preference', 'es') if context_metadata else 'es'
         history_block = "RECENT CONVERSATION:\n" + "\n".join([f"{m['role'].upper()}: {m['content']}" for m in chat_history[-3:]]) if chat_history else ""
-        full_prompt = f"{metadata_block}\n\n{history_block}\n\nUSER QUESTION: {user_prompt}\n\nINSTRUCTIONS:\n- Use history to identify subjects.\n- ALWAYS use Thought/Final Answer format."
+        
+        full_prompt = f"""
+{metadata_block}
+
+{history_block}
+
+CONTEXT:
+- Today's Date: {now}
+- Latest Data Point Available: {date_max}
+
+USER QUESTION: {user_prompt}
+
+INSTRUCTIONS:
+- When asked for "last year", "last two years", or relative dates, use the "Latest Data Point Available" ({date_max}) as the most recent reference.
+- ALWAYS state the exact date range (YYYY-MM to YYYY-MM) used in your Final Answer.
+- Respond in {lang.upper()} (matching the user's current question language).
+- Provide a concise, complete-sentence answer.
+"""
         
         print(f"\n--- [AGENT QUERY START] ---\n{full_prompt}\n---")
         try:
             res = self.agent.invoke({"input": full_prompt})
-            print(f"--- [AGENT RESPONSE] ---\n{res.get('output', 'No output')}\n---")
+            ans = res.get('output', '')
+            
+            # --- Output Cleaning ---
+            # Remove "Final Answer:" label if present
+            if "Final Answer:" in ans:
+                ans = ans.split("Final Answer:")[-1].strip()
+            
+            # Remove leading "Thought:" sections that might have leaked
+            # This regex looks for "Thought:" at the start of the string or after a newline,
+            # and removes it along with everything until the next double newline or the end.
+            ans = re.sub(r'(^|\n)Thought:.*?\n(\n|$)', '\n', ans, flags=re.DOTALL | re.IGNORECASE).strip()
+            ans = re.sub(r'^Thought:.*', '', ans, flags=re.IGNORECASE).strip()
+
+            res['output'] = ans
+            print(f"--- [AGENT RESPONSE (CLEAN)] ---\n{ans}\n---")
             return res
         except OutputParserException as e:
             output = str(e.llm_output) if hasattr(e, 'llm_output') else str(e)
-            output = output.replace("Final Answer:", "").strip()
+            # Recovery cleaning
+            if "Final Answer:" in output:
+                output = output.split("Final Answer:")[-1]
+            output = re.sub(r'^Thought:.*?\n', '', output, flags=re.IGNORECASE).strip()
+            
             print(f"--- [AGENT PARSE ERROR RECOVERY] ---\n{output}\n---")
-            return {"output": output}
+            return {"output": output.strip()}
         except Exception as e:
             if any(x in str(e).lower() for x in ["rate_limit", "429", "quota"]):
                 return {"output": "⚠️ **Quota reached.** Please wait 30s."}

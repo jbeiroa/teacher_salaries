@@ -32,30 +32,40 @@ class InputValidator:
 
     def is_relevant(self, text: str) -> Tuple[bool, str]:
         """
-        Uses a small local model to determine if the query is relevant 
-        to Argentinian economics, salaries, or the dashboard.
+        Determines if the query is relevant using heuristics first, then a small LLM.
         """
         clean_text = text.strip().lower()
-        if len(clean_text) < 15 and any(word in clean_text for word in ["hello", "hola", "hi", "quien sos", "who are you"]):
-            return True, "Greeting"
+        
+        # 1. Expanded Heuristic Pass (Greetings & Identity)
+        greetings = ["hello", "hola", "hi", "hey", "buenos dias", "buenas tardes"]
+        identity = ["quien sos", "quién sos", "who are you", "tu nombre", "your name", "what are you", "que sos", "qué sos"]
+        if any(word in clean_text for word in greetings + identity):
+            return True, "Greeting/Identity"
 
+        # 2. Data Keyword "Fast Pass" (Spanish & English)
+        # Includes all Argentinian provinces and key economic terms
+        provinces = [
+            "buenos aires", "caba", "catamarca", "chaco", "chubut", "cordoba", "corrientes", 
+            "entre rios", "formosa", "jujuy", "la pampa", "la rioja", "mendoza", "misiones", 
+            "neuquen", "rio negro", "salta", "san juan", "san luis", "santa cruz", "santa fe", 
+            "santiago del estero", "tierra del fuego", "tucuman"
+        ]
+        keywords = [
+            "salario", "sueldo", "cobran", "pagan", "ganan", "salary", "pay", "earn",
+            "inflacion", "inflation", "ipc", "cpi", "canasta", "pobreza", "poverty",
+            "ranking", "top", "bottom", "peores", "mejores", "loss", "perdimos", "ganamos",
+            "poder adquisitivo", "purchasing power", "evolucion", "evolution"
+        ]
+        
+        if any(prov in clean_text for prov in provinces) or any(key in clean_text for key in keywords):
+            return True, "Heuristic_Match"
+
+        # 3. LLM Fallback for ambiguous cases
         prompt = f"""
-        Determine if the user query is about Argentine teacher salaries, inflation, poverty, or provincial economic comparisons.
-        
-        VALID TOPICS (RELEVANT):
-        - Salaries in specific provinces (e.g., "What is Chaco's salary?")
-        - Purchasing power or inflation (e.g., "loss in Buenos Aires", "IPC growth")
-        - Rankings (e.g., "top paying province")
-        - Poverty or cost of living (CBT, CBA)
-        
-        INVALID TOPICS (IRRELEVANT):
-        - Asking for songs, poems, or jokes.
-        - General knowledge not about Argentina's economy.
-        - Coding or math problems unrelated to the data.
-
-        USER QUERY: "{text}"
-
-        Respond with only one word: RELEVANT or IRRELEVANT.
+        Determine if the user query is about Argentine economy, teacher salaries, or provincial data.
+        Relevant topics include: salaries, inflation, poverty, rankings, and economic comparisons in Argentina.
+        User Query: "{text}"
+        Respond with ONLY 'RELEVANT' or 'IRRELEVANT'.
         """
         
         try:
