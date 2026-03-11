@@ -32,11 +32,11 @@ class Scraper():
 
     def __init__(self):
         """Initializes the Scraper with default URLs and constructs the IPC URL."""
-        self.URL_TESTIGO_BRUTO = "https://www.argentina.gob.ar/sites/default/files/2022/07/1._salario_bruto_mg10_25.xlsx"
-        self.URL_TESTIGO_NETO = "https://www.argentina.gob.ar/sites/default/files/2022/07/2._salario_de_bolsillo_mg10_25.xlsx"
-        self.URL_BASICO = "https://www.argentina.gob.ar/sites/default/files/2022/07/3._sueldo_basico_25.xlsx"
-        self.URL_REMUNERATIVOS = "https://www.argentina.gob.ar/sites/default/files/2022/07/4._porcentaje_de_componentes_remunerativos_sobre_el_salario_bruto_provincial_del_mg10_25.xlsx"
-        self.URL_SUMAS_ADICIONALES = "https://www.argentina.gob.ar/sites/default/files/2022/07/5._sumas_adicionales_25.xlsx"
+        self.URL_TESTIGO_BRUTO = "https://www.argentina.gob.ar/sites/default/files/2022/07/1._salario_bruto_mg10_1225.xlsx"
+        self.URL_TESTIGO_NETO = "https://www.argentina.gob.ar/sites/default/files/2022/07/2._salario_de_bolsillo_mg10_1225.xlsx"
+        self.URL_BASICO = "https://www.argentina.gob.ar/sites/default/files/2022/07/3._sueldo_basico_1225.xlsx"
+        self.URL_REMUNERATIVOS = "https://www.argentina.gob.ar/sites/default/files/2022/07/4._porcentaje_de_componentes_remunerativos_sobre_el_salario_bruto_provincial_del_mg10_1225.xlsx"
+        self.URL_SUMAS_ADICIONALES = "https://www.argentina.gob.ar/sites/default/files/2022/07/5._sumas_adicionales12_25.xlsx"
         
         # IPC URL construction
         self.URL_IPC = self._build_ipc_url() 
