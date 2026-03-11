@@ -91,7 +91,7 @@ df_net_salary = scraper.get_cgecse_salaries(scraper.URL_TESTIGO_NETO).loc[START_
 df_gross_salary = scraper.get_cgecse_salaries(scraper.URL_TESTIGO_BRUTO).loc[START_LIMIT:]
 df_basic_salary = scraper.get_cgecse_salaries(scraper.URL_BASICO).loc[START_LIMIT:]
 
-df_ipc = scraper.get_ipc_indec().loc[START_LIMIT:]
+df_ipc = scraper.get_ipc_indec()
 
 df_cba_cbt = scraper.get_cba_cbt().loc[START_LIMIT:]
 
@@ -192,10 +192,10 @@ TRANSLATIONS = {
         'base100_toggle': "Show as Index (Base 100)",
         'prov_comp': "Provincial Comparison",
         'latest': "Latest",
-        'q_var': "Var. Trimestral",
-        'a_var': "Acum. Anual",
-        'i_var': "Var. Interanual",
-        'real_var_prefix': "Var. Real:",
+        'q_var': "Quarterly Var.",
+        'a_var': "Annual Acc.",
+        'i_var': "Interannual Var.",
+        'real_var_prefix': "Real Var.:",
         'comp_header_prefix': "Provincial Comparison",
         'xaxis_salary': "Salary Amount ($)",
         'xaxis_index': "Index (Base 100)",
