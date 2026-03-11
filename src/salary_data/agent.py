@@ -1,5 +1,7 @@
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
 from langchain_litellm import ChatLiteLLM
+from langchain_ollama import ChatOllama
+from langchain_aws import ChatBedrock
 from langchain_core.tools import tool
 from src.salary_data.scraper import Scraper
 from pydantic import BaseModel, Field
@@ -30,6 +32,10 @@ class TopKProvincesInput(BaseModel):
     period: str = Field(description="Target period in YYYY-mm format")
     asc: bool = Field(False, description="True for bottom-paying ranking (lowest nominal salary), False for top-paying ranking (highest nominal salary)")
 
+class InflationChangeInput(BaseModel):
+    start_date: str = Field(description="Start date in YYYY-MM-DD format")
+    end_date: str = Field(description="End date in YYYY-MM-DD format")
+
 def _parse_input(input_val: any, target_key: str) -> any:
     """Helper to handle cases where LLM passes a JSON string instead of unpacked args."""
     if isinstance(input_val, str):
@@ -45,7 +51,7 @@ def _parse_input(input_val: any, target_key: str) -> any:
 class DataJournalistAgent:
     def __init__(self, dfs_dict: dict[str, pd.DataFrame], model_params=None):
         self.model_params = model_params or {
-            "model": "ollama/qwen3.5:4b",
+            "model": "ollama/llama3.1:8b",
             "base_url": "http://localhost:11434",
             "temperature": 0
         }
@@ -57,21 +63,42 @@ class DataJournalistAgent:
         df_net = dfs_dict.get('net_salaries')
         df_ipc = dfs_dict.get('inflation_ipc')
         df_poverty = dfs_dict.get('poverty_lines')
+        df_anomalies = dfs_dict.get('anomalies')
+        
         common_index = df_net.index.intersection(df_ipc.index)
         df_net = df_net.loc[common_index]
         df_ipc = df_ipc.loc[common_index]
         df_poverty = df_poverty.loc[common_index]
+        
         start_limit = df_net.index.min()
         df_real = scraper.calculate_real_salary(df_net, df_ipc['infl_Nivel_general'], base_date=start_limit)
+        
         return {
             "nominal_salaries": df_net,
             "real_salaries": df_real,
             "inflation_ipc": df_ipc,
-            "poverty_lines": df_poverty
+            "poverty_lines": df_poverty,
+            "anomalies": df_anomalies
         }
 
     def _setup_agent(self):
-        llm = ChatLiteLLM(**self.model_params)
+        model_name = self.model_params.get("model", "")
+        if model_name.startswith("ollama/"):
+            clean_name = model_name.replace("ollama/", "")
+            llm = ChatOllama(
+                model=clean_name, 
+                base_url=self.model_params.get("base_url", "http://localhost:11434"),
+                temperature=self.model_params.get("temperature", 0)
+            )
+        elif model_name.startswith("bedrock/"):
+            clean_name = model_name.replace("bedrock/", "")
+            llm = ChatBedrock(
+                model_id=clean_name,
+                model_kwargs={"temperature": self.model_params.get("temperature", 0)}
+            )
+        else:
+            llm = ChatLiteLLM(**self.model_params)
+            
         df_list = list(self.dfs_dict.values())
         df_net = self.dfs_dict['nominal_salaries']
 
@@ -157,7 +184,29 @@ class DataJournalistAgent:
                 return res
             except Exception as e: return f"Error: {e}."
 
-        custom_tools = [get_province_salary, calculate_purchasing_power_loss, get_ranking_top_k]
+        @tool("calculate_inflation_change", args_schema=InflationChangeInput)
+        def calculate_inflation_change(start_date: str, end_date: str) -> str:
+            """Calculates the percentage change in the general inflation index (IPC) between two dates.
+            Use this when you need to compare salary evolution against inflation, or when asked directly about inflation."""
+            try:
+                df_ipc = self.dfs_dict['inflation_ipc']
+                s_d = _parse_input(start_date, "start_date")
+                e_d = _parse_input(end_date, "end_date")
+                
+                s_d = str(s_d).strip(" '\"[]")
+                e_d = str(e_d).strip(" '\"[]")
+                
+                available = df_ipc.index
+                s_date = available[available >= pd.to_datetime(s_d)].min()
+                e_date = available[available <= pd.to_datetime(e_d)].max()
+                
+                start_val = df_ipc.loc[s_date, 'infl_Nivel_general']
+                end_val = df_ipc.loc[e_date, 'infl_Nivel_general']
+                inflation_change = (end_val / start_val - 1) * 100
+                return f"Inflation (IPC) change from {s_date.strftime('%Y-%m')} to {e_date.strftime('%Y-%m')}: {inflation_change:+.2f}%"
+            except Exception as e: return f"Error: {e}."
+
+        custom_tools = [get_province_salary, calculate_purchasing_power_loss, get_ranking_top_k, calculate_inflation_change]
         provinces = list(self.dfs_dict['nominal_salaries'].columns)
         date_min = self.dfs_dict['nominal_salaries'].index.min().strftime('%Y-%m-%d')
         date_max = self.dfs_dict['nominal_salaries'].index.max().strftime('%Y-%m-%d')
@@ -167,13 +216,14 @@ You are "Lia", the AI Data Journalist for the Teacher Salaries Dashboard.
 Your persona is professional, helpful, and data-driven. 
 
 IDENTITY & CONTEXT:
-- If asked "Who are you?" or "What can you do?", explain that you are an assistant designed to analyze Argentinian teacher salaries, inflation, and provincial data using the dashboard's datasets.
+- If asked "Who are you?" or "What can you do?", explain that you are an assistant designed to analyze Argentinian teacher salaries, inflation, provincial data, and anomalies (unusual drops or gains in real salary) using the dashboard's datasets.
 - Always be polite and professional.
 
 TOOL SELECTION RULES:
-1. FOR EVOLUTION / CHANGE OVER TIME: Always use 'calculate_purchasing_power_loss'. This includes questions like "Who lost the most?", "Ranking of loss", "Evolution since X".
-2. FOR SNAPSHOTS / CURRENT STATE: Use 'get_ranking_top_k' only to compare salaries at a single point in time (e.g., "highest salary in Jan 2024").
-3. FOR SINGLE PROVINCE: Use 'get_province_salary'.
+1. TOOL PREFERENCE: Always prefer using the provided custom tools (`calculate_purchasing_power_loss`, `calculate_inflation_change`, `get_province_salary`, `get_ranking_top_k`). Only write your own Python code if a specific task cannot be accomplished with these tools.
+2. FOR EVOLUTION / CHANGE OVER TIME: Always use 'calculate_purchasing_power_loss' for salaries. If asked to compare against inflation, use 'calculate_inflation_change'.
+3. FOR SNAPSHOTS / CURRENT STATE: Use 'get_ranking_top_k' only to compare salaries at a single point in time (e.g., "highest salary in Jan 2024").
+4. FOR SINGLE PROVINCE: Use 'get_province_salary'.
 
 LANGUAGE & OUTPUT RULES:
 1. RESPONSE LANGUAGE: Match the user's language (Spanish for Spanish, English for English).
@@ -184,7 +234,7 @@ LANGUAGE & OUTPUT RULES:
 
 BEHAVIORAL RULES:
 1. For general conversation or identity questions, respond DIRECTLY without using tools.
-2. For data-related questions, use the appropriate tool.
+2. EDGE CASES: If a user asks about a province or location not in the dataset (e.g., fictional places like "Narnia"), politely state that it is not a valid province instead of using tools.
 3. ALWAYS provide a clear, conversational answer to the user.
 
 DATA SPECS:
@@ -270,10 +320,10 @@ INSTRUCTIONS:
         prompt = "Generate a Markdown executive summary of Argentinian teacher salaries."
         return self.query(prompt).get("output", "Error.")
 
-    def query_and_log(self, question: str, ground_truth: str = None):
+    def query_and_log(self, question: str, ground_truth: str = None, chat_history: list = None):
         if mlflow.active_run() is None:
             mlflow.start_run(run_name=f"Eval_{self.model_params['model']}")
-        res = self.query(question)
+        res = self.query(question, chat_history=chat_history)
         out = res.get("output", "")
         eval_data = {"question": [question], "answer": [out], "ground_truth": [ground_truth], "model": [self.model_params['model']]}
         mlflow.log_table(data=eval_data, artifact_file="eval_results.json")

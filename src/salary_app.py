@@ -21,7 +21,7 @@ scraper = Scraper()
 # Load analytics artifacts
 pipeline = AnalyticsPipeline()
 df_clusters, df_anomalies = pipeline.load_latest_artifacts()
-HAS_ANALYTICS = df_clusters is not None
+HAS_ANALYTICS = df_clusters is not None and df_anomalies is not None
 
 # Load and Parse Reports
 REPORT_SECTIONS = {
@@ -99,7 +99,8 @@ df_cba_cbt = scraper.get_cba_cbt().loc[START_LIMIT:]
 agent_dfs = {
     "net_salaries": df_net_salary,
     "inflation_ipc": df_ipc,
-    "poverty_lines": df_cba_cbt
+    "poverty_lines": df_cba_cbt,
+    "anomalies": df_anomalies
 }
 model_params = {
     "model": "openai/gpt-4o-mini",
@@ -314,9 +315,12 @@ def get_variation_metrics(nom_series, real_series, ipc_series):
         "i_ipc": v_ipc['interannual'].iloc[-1] if not v_ipc.empty else 0,
     }
 
+from mangum import Mangum
+
 # --- App Initialization ---
 app = Dash(__name__, external_stylesheets=[dbc.themes.FLATLY, "https://use.fontawesome.com/releases/v5.15.4/css/all.css"])
 server = app.server
+handler = Mangum(server)
 
 # --- Layout ---
 app.layout = dbc.Container([
@@ -684,6 +688,38 @@ def update_dashboard(selected_province, salary_type, adjustments, ref_line_col, 
             fig_hist.add_trace(go.Scatter(x=df_real_filt.index, y=df_real_filt[selected_province], name="Real", line=dict(color='#18bc9c', width=3)))
             if show_ref:
                 fig_hist.add_trace(go.Scatter(x=df_ref_real.loc[mask].index, y=df_ref_real.loc[mask], name="Ref. (Real)", line=dict(color='#e74c3c', dash='dash')))
+
+    # Add Anomaly Markers to the historical chart
+    if HAS_ANALYTICS:
+        prov_anoms = df_anomalies[(df_anomalies['province'] == selected_province) & (df_anomalies['anomaly'] == -1)]
+        if not prov_anoms.empty:
+            # Filter anomalies to only those in the current view (mask)
+            prov_anoms = prov_anoms[prov_anoms['date'].isin(df_nom_filt.index)]
+            if not prov_anoms.empty:
+                # Find the values (Nominal or Real) for these dates
+                if is_base100:
+                    if show_nominal:
+                        b_date_dt = pd.to_datetime(base_date)
+                        val_nom_base = df_nom.loc[b_date_dt, selected_province]
+                        anom_y = (df_nom.loc[prov_anoms['date'], selected_province] / val_nom_base) * 100
+                    else:
+                        b_date_dt = pd.to_datetime(base_date)
+                        val_real_base = df_real.loc[b_date_dt, selected_province]
+                        anom_y = (df_real.loc[prov_anoms['date'], selected_province] / val_real_base) * 100
+                else:
+                    if show_nominal:
+                        anom_y = df_nom.loc[prov_anoms['date'], selected_province]
+                    else:
+                        anom_y = df_real.loc[prov_anoms['date'], selected_province]
+                
+                fig_hist.add_trace(go.Scatter(
+                    x=prov_anoms['date'], 
+                    y=anom_y,
+                    mode='markers',
+                    name='Anomaly',
+                    marker=dict(color='red', size=10, symbol='circle'),
+                    hovertemplate="%{x|%Y-%m}: %{y:,.2f} (Anomaly)"
+                ))
 
     fig_hist.update_layout(
         margin=dict(l=20, r=20, t=20, b=20),

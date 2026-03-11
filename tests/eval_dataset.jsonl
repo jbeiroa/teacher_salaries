@@ -1,0 +1,10 @@
+{"q": "Which is the top paying province in September 2025 and what is the salary?", "gt": "Neuquén ($1,471,200)", "history": [], "tags": ["baseline", "single_province"]}
+{"q": "What was the purchasing power loss in Buenos Aires between September 2023 and September 2025?", "gt": "-30.45%", "history": [], "tags": ["baseline", "purchasing_power"]}
+{"q": "Compare the salary evolution of Córdoba versus Inflation (IPC) between December 2023 and September 2025.", "gt": "Salary: +175.90%, IPC: +165.60% (Beat inflation by ~10 pts)", "history": [], "tags": ["baseline", "comparison"]}
+{"q": "What was the real salary index for Santa Fe in June 2024 (Base 100 = September 2023)?", "gt": "75.94", "history": [], "tags": ["baseline", "real_salary"]}
+{"q": "Which province had the highest percentage growth in real salary between September 2023 and September 2025?", "gt": "Neuquén (+23.8%)", "history": [], "tags": ["baseline", "growth_ranking"]}
+{"q": "Which provinces lost more purchasing power between November 2023 and today?", "gt": "Neuquén (+23.8%), Santa Cruz (+21.3%), Tierra del Fuego (+9.7%)\nSalta (-34.5%), Santiago del Estero (-34.5%), San Luis (-47.3%)", "history": [], "tags": ["baseline", "loss_ranking"]}
+{"q": "¿Cuál fue la provincia que más poder adquisitivo perdió en 2024?", "gt": "Debe responder en español mencionando la provincia y el porcentaje de pérdida.", "history": [], "tags": ["multilingual"]}
+{"q": "What was the inflation in Narnia in 2024?", "gt": "Should gracefully state that Narnia is not a valid province.", "history": [], "tags": ["edge_case", "invalid_location"]}
+{"q": "Compare salary in 1990 versus 2025.", "gt": "Should state that data for 1990 is unavailable.", "history": [], "tags": ["edge_case", "out_of_bounds_date"]}
+{"q": "And how much purchasing power did it lose since last year?", "gt": "Purchasing power change for Neuquén.", "history": [{"role": "user", "content": "Which province pays the most right now?"}, {"role": "assistant", "content": "The top paying province right now is Neuquén."}], "tags": ["context_retention"]}

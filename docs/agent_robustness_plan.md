@@ -16,11 +16,13 @@ Harden the Data Journalist Agent against adversarial inputs, improve response re
 - **Feature Extension:** Enhanced `calculate_purchasing_power_loss` to support ranking by change (loss/gain) directly within the tool. ✅
 - **Deterministic Tests:** Verified tool and guardrail logic with temporary test scripts. ✅
 
-## 4. Phase 3: Automated Evals (IN PROGRESS ⏳)
-- **Dataset Creation:** Build `tests/eval_dataset.jsonl` covering edge cases and context retention. [TO DO]
-- **LLM-as-a-Judge:** Update `scripts/run_evaluation.py` to use GPT-4o for grading results on a 0-5 scale. [TO DO]
+## 4. Phase 3: Automated Evals (COMPLETED ✅)
+- **Dataset Creation:** Build `tests/eval_dataset.jsonl` covering edge cases and context retention. ✅
+- **LLM-as-a-Judge:** Update `scripts/run_evaluation.py` to use GPT-4o for grading results on a 0-5 scale. ✅
 
-## 5. Phase 4: Prompt Refinement (ONGOING 🔄)
+## 5. Phase 4: Prompt Refinement (COMPLETED ✅)
 - **Iterative Tuning:** Adjusted system prompt for identity ("Lia"), multilingual support, and strict date reference handling. ✅
 - **Instruction weighting:** Enforced "RECENT CONVERSATION" and "Latest Data Point Available" context. ✅
 - **Output Formatting:** Mandated complete-sentence responses including actual data/percentages. ✅
+- **Tool Preference & New Tool:** Added `calculate_inflation_change` and explicitly instructed to avoid writing Python code, preferring prewritten tools. ✅
+- **Local Model Stability:** Replaced default local testing model with `ollama/llama3.1:8b` to bypass output parsing errors with Qwen tool lists. ✅
