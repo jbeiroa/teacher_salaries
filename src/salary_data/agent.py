@@ -317,8 +317,161 @@ INSTRUCTIONS:
             return {"output": f"Error: {str(e)}"}
 
     def generate_executive_summary(self, lang='es') -> str:
-        prompt = "Generate a Markdown executive summary of Argentinian teacher salaries."
-        return self.query(prompt).get("output", "Error.")
+        """Generates a data-driven executive summary with macro indicators and tabular salary comparison."""
+        df_net = self.dfs_dict['nominal_salaries']
+        df_real = self.dfs_dict['real_salaries']
+        df_ipc = self.dfs_dict['inflation_ipc']
+        df_poverty = self.dfs_dict['poverty_lines']
+        
+        last_date = df_net.index.max()
+        prev_quarter = last_date - pd.DateOffset(months=3)
+        prev_year = last_date - pd.DateOffset(years=1)
+        
+        # Annual accumulated (YTD): from Dec of previous year
+        dec_prev_year_date = pd.Timestamp(year=last_date.year - 1, month=12, day=1)
+        if dec_prev_year_date not in df_net.index:
+            dec_prev_year_date = df_net.index[df_net.index <= dec_prev_year_date].max()
+
+        # Formatting helpers
+        def f_curr(v): return f"${v:,.0f}"
+        def f_pct(v): return f"{v*100:+.1f}%"
+        
+        # Localized date formatting helper
+        def f_date(dt, lang):
+            months_es = {
+                1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
+                7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+            }
+            if lang == 'es':
+                return f"{months_es[dt.month]} {dt.year}"
+            return dt.strftime('%B %Y')
+
+        # --- Macroeconomic Table ---
+        # IPC (General), CBT (Family 4), CBA (Family 4)
+        ipc_col = 'infl_Nivel_general'
+        cbt_col = 'linea_pobreza'
+        cba_col = 'linea_indigencia'
+        
+        macro_data = []
+        for label, col, df in [
+            ("IPC", ipc_col, df_ipc),
+            ("CBT (Pobreza)", cbt_col, df_poverty),
+            ("CBA (Indigencia)", cba_col, df_poverty)
+        ]:
+            if col in df.columns:
+                q_var = (df.loc[last_date, col] / df.loc[prev_quarter, col]) - 1
+                ytd_var = (df.loc[last_date, col] / df.loc[dec_prev_year_date, col]) - 1
+                i_var = (df.loc[last_date, col] / df.loc[prev_year, col]) - 1
+                
+                row_label = label if lang == 'es' else label.replace("Pobreza", "Poverty").replace("Indigencia", "Indigency")
+                macro_data.append({
+                    "Indicator" if lang == 'en' else "Indicador": row_label,
+                    "Last Quarter" if lang == 'en' else "Últ. Trimestre": f_pct(q_var),
+                    "Annual Acc." if lang == 'en' else "Acum. Anual": f_pct(ytd_var),
+                    "Interannual" if lang == 'en' else "Interanual": f_pct(i_var)
+                })
+        
+        df_macro_table = pd.DataFrame(macro_data)
+        last_cbt = f_curr(df_poverty.loc[last_date, cbt_col])
+        last_cba = f_curr(df_poverty.loc[last_date, cba_col])
+
+        # --- Salary Table ---
+        summary_df = pd.DataFrame(index=df_net.columns)
+        summary_df['Last Net Salary'] = df_net.loc[last_date]
+        
+        # Nominal variations
+        summary_df['Nom Q'] = (df_net.loc[last_date] / df_net.loc[prev_quarter]) - 1
+        summary_df['Nom YTD'] = (df_net.loc[last_date] / df_net.loc[dec_prev_year_date]) - 1
+        summary_df['Nom I'] = (df_net.loc[last_date] / df_net.loc[prev_year]) - 1
+        
+        # Real variations
+        summary_df['Real Q'] = (df_real.loc[last_date] / df_real.loc[prev_quarter]) - 1
+        summary_df['Real YTD'] = (df_real.loc[last_date] / df_real.loc[dec_prev_year_date]) - 1
+        summary_df['Real I'] = (df_real.loc[last_date] / df_real.loc[prev_year]) - 1
+        
+        summary_df = summary_df.sort_values(by='Last Net Salary', ascending=False)
+        
+        # Real Salary Drop (Average YoY) for insights
+        real_drop_avg = summary_df['Real I'].mean()
+        
+        # Table Formatting for Salary
+        display_df = pd.DataFrame(index=summary_df.index)
+        display_df['Last Net Salary' if lang == 'en' else 'Últ. Salario Neto'] = summary_df['Last Net Salary'].apply(f_curr)
+        
+        real_label = "Real" if lang == 'en' else "Real"
+        display_df['Quarterly Var.' if lang == 'en' else 'Var. Trimestral'] = [
+            f"{f_pct(n)} ({real_label}: {f_pct(r)})" for n, r in zip(summary_df['Nom Q'], summary_df['Real Q'])
+        ]
+        display_df['Annual Acc. Var.' if lang == 'en' else 'Var. Acum. Anual'] = [
+            f"{f_pct(n)} ({real_label}: {f_pct(r)})" for n, r in zip(summary_df['Nom YTD'], summary_df['Real YTD'])
+        ]
+        display_df['Interannual Var.' if lang == 'en' else 'Var. Interanual'] = [
+            f"{f_pct(n)} ({real_label}: {f_pct(r)})" for n, r in zip(summary_df['Nom I'], summary_df['Real I'])
+        ]
+        display_df.index.name = "Province" if lang == "en" else "Provincia"
+        
+        # Insights
+        top_province = summary_df.index[0]
+        bottom_province = summary_df.index[-1]
+        gap = summary_df['Last Net Salary'].max() / summary_df['Last Net Salary'].min()
+        max_var_prov = summary_df['Nom I'].idxmax()
+        min_var_prov = summary_df['Nom I'].idxmin()
+
+        if lang == 'es':
+            report = f"""# Resumen Ejecutivo sobre los Salarios de los Docentes en Argentina
+
+Entre diciembre de 2016 y {f_date(last_date, 'es')} ({df_net.index.min().strftime('%Y-%m')} a {last_date.strftime('%Y-%m')}), los salarios de los docentes en Argentina han experimentado variaciones significativas. 
+
+### Indicadores Macroeconómicos ({f_date(last_date, 'es')})
+Últimos valores de referencia (Canasta para familia de 4):
+*   **Línea de Pobreza (CBT):** {last_cbt}
+*   **Línea de Indigencia (CBA):** {last_cba}
+
+{df_macro_table.to_markdown(index=False)}
+
+### Evolución del Poder Adquisitivo
+Durante el último año, desde {f_date(prev_year, 'es')} hasta {f_date(last_date, 'es')}, los salarios reales han bajado **{abs(real_drop_avg)*100:.1f}%** en promedio. Esta caída refleja que los ajustes salariales no han logrado compensar el aumento sostenido del IPC.
+
+### Tabla de Salarios y Variaciones ({f_date(last_date, 'es')})
+La siguiente tabla detalla la situación salarial por jurisdicción, ordenada por el salario neto más reciente. Las variaciones muestran el cambio nominal seguido del ajuste real (poder de compra) entre paréntesis.
+
+{display_df.reset_index().to_markdown(index=False)}
+
+### Hallazgos Clave
+*   **Brecha Federal:** Existe una diferencia de **{gap:.1f} veces** entre el salario más alto ({top_province}: {f_curr(summary_df['Last Net Salary'].max())}) y el más bajo ({bottom_province}: {f_curr(summary_df['Last Net Salary'].min())}).
+*   **Variación Interanual:** Mientras que **{max_var_prov}** registró el mayor incremento nominal interanual ({f_pct(summary_df['Nom I'].max())}), **{min_var_prov}** tuvo el ajuste más bajo ({f_pct(summary_df['Nom I'].min())}).
+*   **Dinámica Trimestral:** El promedio de ajuste trimestral para todas las provincias fue de **{summary_df['Nom Q'].mean()*100:.1f}%**, con variaciones que oscilan entre el {f_pct(summary_df['Nom Q'].min())} y el {f_pct(summary_df['Nom Q'].max())}.
+
+Los datos reflejan un panorama complejo donde, a pesar de los aumentos nominales, el poder adquisitivo real sigue bajo presión en todo el territorio nacional.
+"""
+        else:
+            report = f"""# Executive Summary: Teacher Salaries in Argentina
+
+Between December 2016 and {f_date(last_date, 'en')} ({df_net.index.min().strftime('%Y-%m')} to {last_date.strftime('%Y-%m')}), teacher salaries in Argentina have undergone significant variations.
+
+### Macroeconomic Indicators ({f_date(last_date, 'en')})
+Reference values (Basket for a family of 4):
+*   **Poverty Line (CBT):** {last_cbt}
+*   **Indigency Line (CBA):** {last_cba}
+
+{df_macro_table.to_markdown(index=False)}
+
+### Purchasing Power Evolution
+Over the last year, from {f_date(prev_year, 'en')} to {f_date(last_date, 'en')}, real salaries have decreased by **{abs(real_drop_avg)*100:.1f}%** on average. This decline reflects that salary adjustments have not managed to compensate for the sustained increase in the IPC.
+
+### Salary and Variations Table ({f_date(last_date, 'en')})
+The following table details the salary situation by jurisdiction, sorted by the most recent net salary. Variations show the nominal change followed by the real adjustment (purchasing power) in parentheses.
+
+{display_df.reset_index().to_markdown(index=False)}
+
+### Key Findings
+*   **Federal Gap:** There is a difference of **{gap:.1f} times** between the highest salary ({top_province}: {f_curr(summary_df['Last Net Salary'].max())}) and the lowest ({bottom_province}: {f_curr(summary_df['Last Net Salary'].min())}).
+*   **Interannual Variation:** While **{max_var_prov}** recorded the highest interannual nominal increase ({f_pct(summary_df['Nom I'].max())}), **{min_var_prov}** had the lowest adjustment ({f_pct(summary_df['Nom I'].min())}).
+*   **Quarterly Dynamics:** The average quarterly adjustment for all provinces was **{summary_df['Nom Q'].mean()*100:.1f}%**, with variations ranging between {f_pct(summary_df['Nom Q'].min())} and {f_pct(summary_df['Nom Q'].max())}.
+
+The data reflects a complex landscape where, despite nominal increases, real purchasing power remains under pressure throughout the national territory.
+"""
+        return report
 
     def query_and_log(self, question: str, ground_truth: str = None, chat_history: list = None):
         if mlflow.active_run() is None:
