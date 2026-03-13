@@ -4,8 +4,8 @@ import pandas as pd
 import os
 import sys
 
-# Add src to path just in case
-sys.path.append(os.path.join(os.getcwd(), "src"))
+# Add project root to sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 def main():
     print("--- Starting Monthly Update Pipeline ---")

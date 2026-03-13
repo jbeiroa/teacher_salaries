@@ -44,7 +44,8 @@ class AnalyticsPipeline:
         
         anomalies_dict = {}
         for prov in df_real.columns:
-            iso = IsolationForest(contamination=0.05, random_state=42)
+            # Increased contamination to catch more historical drops
+            iso = IsolationForest(contamination=0.10, random_state=42)
             # Reshape for sklearn
             X_prov = df_pct[[prov]].values
             anomalies = iso.fit_predict(X_prov)
@@ -122,25 +123,31 @@ class AnalyticsPipeline:
                 clusters_path = os.path.join(artifacts_dir, "clusters.parquet")
                 anomalies_path = os.path.join(artifacts_dir, "anomalies.parquet")
                 
+                print(f"Checking for artifacts in: {artifacts_dir}")
                 if os.path.exists(clusters_path) and os.path.exists(anomalies_path):
                     try:
                         df_clusters = pd.read_parquet(clusters_path)
                         df_anomalies = pd.read_parquet(anomalies_path)
-                        print(f"Loaded artifacts from: {clusters_path}")
+                        print(f"Successfully loaded artifacts: {clusters_path} and {anomalies_path}")
                         return df_clusters, df_anomalies
                     except Exception as e:
-                        print(f"Error loading artifacts from {clusters_path}: {e}")
-            
-            # Note: No print here to avoid noise in production if artifacts aren't strictly required
-            # but usually they are for the advanced analytics tab to work.
+                        print(f"Error reading parquet files from {artifacts_dir}: {e}")
+                else:
+                    if not os.path.exists(clusters_path):
+                        print(f"Missing: {clusters_path}")
+                    if not os.path.exists(anomalies_path):
+                        print(f"Missing: {anomalies_path}")
 
         # 2. Fallback to MLflow (Development approach)
+        # CRITICAL: Do not call this in read-only environments if files are already found!
+        print("Falling back to MLflow for artifacts...")
         self._init_mlflow()
         import mlflow
         client = mlflow.tracking.MlflowClient(self.db_uri)
         try:
             experiment = client.get_experiment_by_name(self.experiment_name)
             if not experiment:
+                print(f"No MLflow experiment found with name: {self.experiment_name}")
                 return None, None
             
             runs = client.search_runs(
@@ -150,6 +157,7 @@ class AnalyticsPipeline:
             )
             
             if not runs:
+                print("No MLflow runs found.")
                 return None, None
                 
             latest_run = runs[0]
@@ -165,4 +173,5 @@ class AnalyticsPipeline:
             print(f"Loaded artifacts from MLflow run: {run_id}")
             return df_clusters, df_anomalies
         except Exception as e:
+            print(f"Failed to load artifacts from MLflow: {e}")
             return None, None

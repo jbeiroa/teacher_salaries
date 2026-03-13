@@ -5,9 +5,15 @@ import plotly.express as px
 import plotly.graph_objects as go
 from salary_data.scraper import Scraper
 from salary_data.analytics import AnalyticsPipeline
+from salary_data.agent import DataJournalistAgent
+from salary_data.guardrails import InputValidator
+from components.chat_interface import create_chat_interface, format_message
 from datetime import datetime
+from dotenv import load_dotenv
 import os
 import re
+
+load_dotenv()
 
 # --- Data Loading ---
 scraper = Scraper()
@@ -15,7 +21,7 @@ scraper = Scraper()
 # Load analytics artifacts
 pipeline = AnalyticsPipeline()
 df_clusters, df_anomalies = pipeline.load_latest_artifacts()
-HAS_ANALYTICS = df_clusters is not None
+HAS_ANALYTICS = df_clusters is not None and df_anomalies is not None
 
 # Load and Parse Reports
 REPORT_SECTIONS = {
@@ -85,9 +91,24 @@ df_net_salary = scraper.get_cgecse_salaries(scraper.URL_TESTIGO_NETO).loc[START_
 df_gross_salary = scraper.get_cgecse_salaries(scraper.URL_TESTIGO_BRUTO).loc[START_LIMIT:]
 df_basic_salary = scraper.get_cgecse_salaries(scraper.URL_BASICO).loc[START_LIMIT:]
 
-df_ipc = scraper.get_ipc_indec().loc[START_LIMIT:]
+df_ipc = scraper.get_ipc_indec()
 
 df_cba_cbt = scraper.get_cba_cbt().loc[START_LIMIT:]
+
+# --- Initialize Agent & Guardrails ---
+agent_dfs = {
+    "net_salaries": df_net_salary,
+    "inflation_ipc": df_ipc,
+    "poverty_lines": df_cba_cbt,
+    "anomalies": df_anomalies
+}
+model_params = {
+    "model": "openai/gpt-4o-mini",
+    "temperature": 0.2,
+    "num_retries": 3
+}
+journalist_agent = DataJournalistAgent(agent_dfs, model_params=model_params)
+validator = InputValidator(relevance_model="ollama/llama3.2:1b")
 
 # --- Translations ---
 TRANSLATIONS = {
@@ -171,10 +192,10 @@ TRANSLATIONS = {
         'base100_toggle': "Show as Index (Base 100)",
         'prov_comp': "Provincial Comparison",
         'latest': "Latest",
-        'q_var': "Var. Trimestral",
-        'a_var': "Acum. Anual",
-        'i_var': "Var. Interanual",
-        'real_var_prefix': "Var. Real:",
+        'q_var': "Quarterly Var.",
+        'a_var': "Annual Acc.",
+        'i_var': "Interannual Var.",
+        'real_var_prefix': "Real Var.:",
         'comp_header_prefix': "Provincial Comparison",
         'xaxis_salary': "Salary Amount ($)",
         'xaxis_index': "Index (Base 100)",
@@ -294,13 +315,17 @@ def get_variation_metrics(nom_series, real_series, ipc_series):
         "i_ipc": v_ipc['interannual'].iloc[-1] if not v_ipc.empty else 0,
     }
 
+from mangum import Mangum
+
 # --- App Initialization ---
-app = Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
+app = Dash(__name__, external_stylesheets=[dbc.themes.FLATLY, "https://use.fontawesome.com/releases/v5.15.4/css/all.css"])
 server = app.server
+handler = Mangum(server)
 
 # --- Layout ---
 app.layout = dbc.Container([
     dcc.Store(id='lang-store', data='es'),
+    create_chat_interface(), # AI Chat Interface
     dbc.Row([
         dbc.Col([
             dbc.Button("?", id="open-offcanvas", n_clicks=0, color="info", outline=True, size="sm", className="mt-4")
@@ -664,6 +689,38 @@ def update_dashboard(selected_province, salary_type, adjustments, ref_line_col, 
             if show_ref:
                 fig_hist.add_trace(go.Scatter(x=df_ref_real.loc[mask].index, y=df_ref_real.loc[mask], name="Ref. (Real)", line=dict(color='#e74c3c', dash='dash')))
 
+    # Add Anomaly Markers to the historical chart
+    if HAS_ANALYTICS:
+        prov_anoms = df_anomalies[(df_anomalies['province'] == selected_province) & (df_anomalies['anomaly'] == -1)]
+        if not prov_anoms.empty:
+            # Filter anomalies to only those in the current view (mask)
+            prov_anoms = prov_anoms[prov_anoms['date'].isin(df_nom_filt.index)]
+            if not prov_anoms.empty:
+                # Find the values (Nominal or Real) for these dates
+                if is_base100:
+                    if show_nominal:
+                        b_date_dt = pd.to_datetime(base_date)
+                        val_nom_base = df_nom.loc[b_date_dt, selected_province]
+                        anom_y = (df_nom.loc[prov_anoms['date'], selected_province] / val_nom_base) * 100
+                    else:
+                        b_date_dt = pd.to_datetime(base_date)
+                        val_real_base = df_real.loc[b_date_dt, selected_province]
+                        anom_y = (df_real.loc[prov_anoms['date'], selected_province] / val_real_base) * 100
+                else:
+                    if show_nominal:
+                        anom_y = df_nom.loc[prov_anoms['date'], selected_province]
+                    else:
+                        anom_y = df_real.loc[prov_anoms['date'], selected_province]
+                
+                fig_hist.add_trace(go.Scatter(
+                    x=prov_anoms['date'], 
+                    y=anom_y,
+                    mode='markers',
+                    name='Anomaly',
+                    marker=dict(color='red', size=10, symbol='circle'),
+                    hovertemplate="%{x|%Y-%m}: %{y:,.2f} (Anomaly)"
+                ))
+
     fig_hist.update_layout(
         margin=dict(l=20, r=20, t=20, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -820,6 +877,115 @@ def update_dashboard(selected_province, salary_type, adjustments, ref_line_col, 
         progress_label = f"{active_idx + 1} / {len(all_slides)}"
 
     return kpi_latest, kpi_q, kpi_a, kpi_i, fig_hist, fig_comp, comp_header, trend_title, report_content, progress_label
+
+# --- Chat & Agent Callbacks ---
+@app.callback(
+    Output("chat-sidebar", "is_open"),
+    Input("open-chat", "n_clicks"),
+    State("chat-sidebar", "is_open"),
+)
+def toggle_chat(n, is_open):
+    if n:
+        return not is_open
+    return is_open
+
+# STAGE 1: Clientside Immediate Feedback
+app.clientside_callback(
+    """
+    function(n_clicks, n_submit, user_input, history) {
+        if ((!n_clicks && !n_submit) || !user_input || user_input.trim() === "") {
+            return [window.dash_clientside.no_update, window.dash_clientside.no_update, window.dash_clientside.no_update, false, false];
+        }
+        const clean = user_input.trim();
+        const new_history = (history || []).concat([
+            {role: 'user', content: clean},
+            {role: 'agent', content: '_THINKING_'}
+        ]);
+        // [history, input_val, pending_query, input_disabled, button_disabled]
+        return [new_history, "", clean, true, true];
+    }
+    """,
+    Output("chat-history-store", "data", allow_duplicate=True),
+    Output("chat-input", "value"),
+    Output("pending-query-store", "data"),
+    Output("chat-input", "disabled"),
+    Output("send-chat", "disabled"),
+    Input("send-chat", "n_clicks"),
+    Input("chat-input", "n_submit"),
+    State("chat-input", "value"),
+    State("chat-history-store", "data"),
+    prevent_initial_call=True
+)
+
+# STAGE 2: Agent Processing (Server-side)
+@app.callback(
+    Output("chat-history-store", "data"),
+    Output("pending-query-store", "data", allow_duplicate=True),
+    Output("chat-input", "disabled", allow_duplicate=True),
+    Output("send-chat", "disabled", allow_duplicate=True),
+    Input("pending-query-store", "data"),
+    State("chat-history-store", "data"),
+    State("province-dropdown", "value"),
+    State("salary-type-radio", "value"),
+    State("date-picker-range", "start_date"),
+    State("date-picker-range", "end_date"),
+    State("lang-store", "data"),
+    prevent_initial_call=True
+)
+def run_agent_process(query, history, province, s_type, start, end, lang):
+    if query is None:
+        return no_update, no_update, False, False
+    
+    # --- Guardrail Check ---
+    is_valid, error_msg = validator.validate(query)
+    if not is_valid:
+        if history and history[-1]['content'] == "_THINKING_":
+            history[-1]['content'] = error_msg
+        return history, None, False, False
+
+    # --- Agent Execution ---
+    context = {
+        "selected_province": province,
+        "salary_type": s_type,
+        "visible_date_range": f"{start} to {end}",
+        "language_preference": lang
+    }
+    
+    try:
+        # History excluding the _THINKING_ placeholder
+        response = journalist_agent.query(query, context_metadata=context, chat_history=history[:-1])
+        ans = response.get("output", "I'm sorry, I couldn't process that.")
+    except Exception as e:
+        ans = f"Error: {str(e)}"
+    
+    if history and history[-1]['content'] == "_THINKING_":
+        history[-1]['content'] = ans
+    
+    # Return updated history, clear pending query, and RE-ENABLE inputs
+    return history, None, False, False
+
+# STAGE 3: Render UI
+@app.callback(
+    Output("chat-history", "children"),
+    Input("chat-history-store", "data"),
+)
+def render_chat(history):
+    if not history:
+        return []
+    return [format_message(m) for m in history]
+
+@app.callback(
+    Output("download-summary-data", "data"),
+    Input("download-summary-btn", "n_clicks"),
+    State("lang-store", "data"),
+    prevent_initial_call=True
+)
+def download_summary(n_clicks, lang):
+    if n_clicks:
+        summary_md = journalist_agent.generate_executive_summary(lang=lang)
+        filename = f"executive_summary_{datetime.now().strftime('%Y%m%d')}.md"
+        return dcc.send_string(summary_md, filename)
+    return no_update
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8050, debug=True)
