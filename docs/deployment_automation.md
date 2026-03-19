@@ -1,24 +1,37 @@
 # Deployment and Automation Guide
 
-This document explains how to maintain and automate the **Teacher Salaries Dashboard** in a production environment using **AWS Lambda** and **Amazon ECR**.
+This document explains how to maintain and automate the **Teacher Salaries Dashboard** in a production environment using **AWS Lambda** and **Amazon S3**.
 
-For security and cost-control configuration of the AI agent, see the **[Guardrails Deployment Guide](guardrails_amazon_bedrock.md)**.
 
-## 1. Production Strategy: Artifact Bundling
-The application is configured to prioritize loading analytics data (clusters and anomalies) from local files located in the `artifacts/` directory.
+## 1. Production Strategy: S3-First Data Loading
+The application uses a decoupled data architecture managed by the `DataLoader` class. Instead of bundling data into the Docker image, the app fetches the latest datasets and analytics artifacts directly from **Amazon S3**.
 
-- `artifacts/clusters.parquet`
-- `artifacts/anomalies.parquet`
+### Data Hierarchy
+1. **S3 (Primary):** The app attempts to load Parquet files from `s3://<BUCKET>/raw/` and `s3://<BUCKET>/artifacts/`.
+2. **Scraper (Fallback):** If S3 is empty or inaccessible, the app automatically triggers the `Scraper` to fetch fresh data from government portals and runs the `AnalyticsPipeline` locally.
 
-This approach avoids the need for a live MLflow server in production, reducing latency and infrastructure costs. These artifacts are bundled directly into the Docker container image deployed to AWS Lambda.
+### Benefits
+- **Zero-Redeploy Updates:** Data can be updated in S3 without rebuilding or redeploying the Lambda function.
+- **Consistency:** The UI and the AI Agent always see the same synchronized datasets.
+- **Performance:** Parquet files on S3 are optimized for fast loading.
 
-## 2. Deploying to AWS Lambda
+## 2. Automated Updates with GitHub Actions
+To keep the data fresh, we use a dedicated GitHub Action that runs twice a month (1st and 15th). This workflow scrapes new data, runs the analytics pipeline, and uploads the results to S3.
 
-### Authentication
-Ensure you have the AWS CLI installed and configured with credentials that have access to ECR and Lambda:
-```bash
-aws configure
-```
+### Workflow: `Update Salary Data`
+**File:** `.github/workflows/data_update.yml`
+
+This workflow is independent of the application deployment. It ensures that even if the app isn't redeployed for months, the data remains current.
+
+### Required Repository Secrets
+Add these to `Settings > Secrets and variables > Actions`:
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_REGION`
+- `AWS_S3_BUCKET`
+- `OPENAI_API_KEY` (Used by the guardrails during the update check)
+
+## 3. Deploying the Application to AWS Lambda
 
 ### Build and Push Docker Image to ECR
 1. **Login to ECR**:
@@ -26,116 +39,37 @@ aws configure
    aws ecr get-login-password --region <YOUR_REGION> | docker login --username AWS --password-stdin <AWS_ACCOUNT_ID>.dkr.ecr.<YOUR_REGION>.amazonaws.com
    ```
 
-2. **Create ECR Repository (First time only)**:
-   ```bash
-   aws ecr create-repository --repository-name teacher-salaries-app --region <YOUR_REGION>
-   ```
-
-3. **Build the Image**:
+2. **Build the Image**:
    ```bash
    docker build -t teacher-salaries-app .
    ```
 
-4. **Tag the Image**:
+3. **Tag and Push**:
    ```bash
    docker tag teacher-salaries-app:latest <AWS_ACCOUNT_ID>.dkr.ecr.<YOUR_REGION>.amazonaws.com/teacher-salaries-app:latest
-   ```
-
-5. **Push the Image**:
-   ```bash
    docker push <AWS_ACCOUNT_ID>.dkr.ecr.<YOUR_REGION>.amazonaws.com/teacher-salaries-app:latest
    ```
 
 ### Update Lambda Function
-Once the new image is pushed, update the Lambda function to use the latest image:
 ```bash
 aws lambda update-function-code \
     --function-name teacher-salaries-app \
     --image-uri <AWS_ACCOUNT_ID>.dkr.ecr.<YOUR_REGION>.amazonaws.com/teacher-salaries-app:latest
 ```
 
-## 3. Automated Updates with GitHub Actions
-To keep the dashboard updated with the latest monthly data from CGECSE and INDEC, we use a GitHub Action. The workflow trains the models and pushes a new Docker image to ECR.
-
-### Required Repository Secrets
-Add the following secrets to your GitHub repository (`Settings > Secrets and variables > Actions`):
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `AWS_REGION`
-- `AWS_ACCOUNT_ID`
-
-### Workflow Configuration
-Create `.github/workflows/monthly_update.yml` with the following content:
-
-```yaml
-name: Monthly Data & Model Update
-
-on:
-  schedule:
-    - cron: '0 0 1 * *' # 1st of every month
-  workflow_dispatch:
-
-jobs:
-  update-analytics-and-deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
-      - name: Install Dependencies
-        run: poetry install --no-interaction
-
-      - name: Run Update Pipeline
-        run: |
-          export PYTHONPATH=$PYTHONPATH:$(pwd)/src
-          poetry run python train_analytics.py
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build, tag, and push image to Amazon ECR
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: teacher-salaries-app
-          IMAGE_TAG: latest
-        run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-
-      - name: Update Lambda Function Code
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: teacher-salaries-app
-          IMAGE_TAG: latest
-        run: |
-          aws lambda update-function-code \
-            --function-name teacher-salaries-app \
-            --image-uri $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-```
-
-## 4. Local Training
-If you wish to update the models manually before a deployment:
+## 4. Manual Data Refresh
+To manually trigger a data update and S3 upload from your local machine:
 ```bash
-export PYTHONPATH=$PYTHONPATH:$(pwd)/src
-poetry run python train_analytics.py
+poetry run python scripts/update_data.py
 ```
-This will update the files in `artifacts/`, which you can then test locally or bundle in your next Docker build.
+This script will check for new data and only upload to S3 if it finds more recent records than those already stored.
+
+## 5. Environment Configuration
+Ensure your production environment (Lambda) has the following variables set:
+
+| Variable | Description |
+| :--- | :--- |
+| `AWS_S3_BUCKET` | Name of the S3 bucket for data storage. |
+| `OPENAI_API_KEY` | Key for GPT-4o-mini (Agent) and GPT-4.1-nano (Guardrails). |
+| `GUARDRAIL_MODEL` | Set to `openai/gpt-4.1-nano`. |
+| `AGENT_MODEL` | Set to `openai/gpt-4o-mini`. |
