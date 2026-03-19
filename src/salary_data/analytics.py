@@ -66,17 +66,27 @@ class AnalyticsPipeline:
     def run_pipeline(self, df_real, n_clusters=6):
         """Run the full pipeline and log to MLflow."""
         self._init_mlflow()
+        import mlflow
         import mlflow.sklearn
+
+        # 0. Filter out non-province columns (e.g. Promedio Ponderado)
+        non_provinces = ["Promedio Ponderado (MG Total)", "Promedio Ponderado"]
+        df_real_filtered = df_real.drop(
+            columns=[c for c in non_provinces if c in df_real.columns], errors="ignore"
+        )
+        print(f"[Analytics] Training on {len(df_real_filtered.columns)} provinces.")
 
         with mlflow.start_run(run_name="Production_Pipeline") as run:
             print(f"Started run: {run.info.run_id}")
 
             # 1. Clustering
-            ks_model, labels = self.train_clustering(df_real, n_clusters)
-            df_clusters = pd.DataFrame({"province": df_real.columns, "cluster": labels})
+            ks_model, labels = self.train_clustering(df_real_filtered, n_clusters)
+            df_clusters = pd.DataFrame(
+                {"province": df_real_filtered.columns, "cluster": labels}
+            )
 
             # 2. Anomaly Detection
-            df_anomalies = self.train_anomaly_detection(df_real)
+            df_anomalies = self.train_anomaly_detection(df_real_filtered)
 
             # 3. Combine results
             # We save anomalies in a long format
@@ -100,6 +110,12 @@ class AnalyticsPipeline:
 
             # Log params and artifacts
             mlflow.log_param("n_clusters", n_clusters)
+
+            # Log each province's cluster as a parameter for easy tracking
+            for _, row in df_clusters.iterrows():
+                # We prefix with 'c_' to group them in the UI
+                mlflow.log_param(f"c_{row['province']}", row["cluster"])
+
             mlflow.log_artifact(clusters_path)
             mlflow.log_artifact(anomalies_path)
 
