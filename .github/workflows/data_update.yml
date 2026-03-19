@@ -12,19 +12,20 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      PYTHONPATH: src
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
 
       - name: Install Poetry
         run: |
           curl -sSL https://install.python-poetry.org | python3 -
           echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
       - name: Install dependencies
         run: poetry install
@@ -38,5 +39,4 @@ jobs:
           AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
           GUARDRAIL_MODEL: "openai/gpt-4.1-nano"
           AGENT_MODEL: "openai/gpt-4o-mini"
-          PYTHONPATH: src
-        run: poetry run python scripts/update_data.py
+        run: PYTHONPATH=src poetry run python scripts/update_data.py
