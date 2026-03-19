@@ -10,6 +10,8 @@ on:
 jobs:
   update-data:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,4 +38,5 @@ jobs:
           AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
           GUARDRAIL_MODEL: "openai/gpt-4.1-nano"
           AGENT_MODEL: "openai/gpt-4o-mini"
+          PYTHONPATH: src
         run: poetry run python scripts/update_data.py
