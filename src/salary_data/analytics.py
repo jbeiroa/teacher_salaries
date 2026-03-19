@@ -1,14 +1,13 @@
 import pandas as pd
-import mlflow
-from tslearn.clustering import KShape
-from tslearn.preprocessing import TimeSeriesScalerMeanVariance
-from sklearn.ensemble import IsolationForest
 import os
+import numpy as np
 
 
 class AnalyticsPipeline:
     def __init__(
-        self, experiment_name="Teacher_Salaries_Analytics", db_uri="sqlite:///mlflow.db"
+        self,
+        experiment_name="Teacher_Salaries_Analytics",
+        db_uri="sqlite:///mlflow.db",
     ):
         self.experiment_name = experiment_name
         self.db_uri = db_uri
@@ -26,6 +25,8 @@ class AnalyticsPipeline:
 
     def prepare_data(self, df_real):
         """Prepare data for clustering by scaling."""
+        from tslearn.preprocessing import TimeSeriesScalerMeanVariance
+
         # df_real: Index = Dates, Columns = Provinces
         X = df_real.T.values
         X_scaled = TimeSeriesScalerMeanVariance().fit_transform(X)
@@ -33,6 +34,8 @@ class AnalyticsPipeline:
 
     def train_clustering(self, df_real, n_clusters=6):
         """Train K-Shape clustering."""
+        from tslearn.clustering import KShape
+
         X_scaled = self.prepare_data(df_real)
         ks = KShape(n_clusters=n_clusters, verbose=False, random_state=42)
         ks.fit(X_scaled)
@@ -41,8 +44,11 @@ class AnalyticsPipeline:
 
     def train_anomaly_detection(self, df_real):
         """Train Isolation Forest for anomalies based on quarterly returns."""
+        from sklearn.ensemble import IsolationForest
+
         # Calculate quarterly percentage change
         df_pct = df_real.pct_change(periods=3).fillna(0)
+
 
         anomalies_dict = {}
         for prov in df_real.columns:

@@ -13,16 +13,34 @@ class DataLoader:
     def __init__(self):
         self.bucket = os.getenv("AWS_S3_BUCKET")
         self.region = os.getenv("AWS_REGION", "us-east-1")
-        self.s3_client = (
-            boto3.client(
-                "s3",
-                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-                aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-                region_name=self.region,
-            )
-            if self.bucket
-            else None
-        )
+
+        # Get credentials from environment
+        access_key = os.getenv("AWS_ACCESS_KEY_ID")
+        secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+        session_token = os.getenv("AWS_SESSION_TOKEN")
+
+        if self.bucket:
+            # Check for manually provided user keys. 
+            # Note: Lambda's internal keys start with 'ASIA'. We should let boto3 handle those automatically.
+            is_manual_key = access_key and not access_key.startswith("ASIA")
+            
+            if is_manual_key and secret_key and access_key.strip() and secret_key.strip():
+                print(f"[DataLoader] Detected manual Access Key (starting with: {access_key[:5]}...)")
+                self.s3_client = boto3.client(
+                    "s3",
+                    aws_access_key_id=access_key.strip(),
+                    aws_secret_access_key=secret_key.strip(),
+                    aws_session_token=session_token.strip() if session_token else None,
+                    region_name=self.region,
+                )
+            else:
+                # No manual keys provided (or we are in Lambda with temporary ASIA keys).
+                # Boto3's default credential chain handles IAM Roles and ASIA keys automatically.
+                print("[DataLoader] Relying on default credential chain / IAM Role.")
+                self.s3_client = boto3.client("s3", region_name=self.region)
+        else:
+            print("[DataLoader] WARNING: AWS_S3_BUCKET not set.")
+            self.s3_client = None
 
         self.scraper = Scraper()
         self.pipeline = AnalyticsPipeline()
@@ -79,6 +97,14 @@ class DataLoader:
 
         # If any data is missing from S3, perform a full scrape (fallback)
         if loaded_count < len(keys):
+            # CRITICAL: Do NOT auto-scrape in Lambda production environment as it causes timeouts (10s+).
+            # The bucket should be primed beforehand.
+            if os.getenv("LAMBDA_TASK_ROOT"):
+                print(f"[DataLoader] ERROR: Missing {len(keys) - loaded_count} keys in S3. Skipping auto-scrape to prevent timeout.")
+                # We return whatever we have, or partial data, 
+                # but we don't trigger a 20-second scrape.
+                return data
+
             print(
                 f"[DataLoader] Only {loaded_count}/{len(keys)} found in S3. Falling back to scraper."
             )

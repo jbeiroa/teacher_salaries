@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from langchain_core.exceptions import OutputParserException
 import pandas as pd
-import mlflow
 import re
 
 import json
@@ -569,6 +568,8 @@ The data reflects a complex landscape where, despite nominal increases, real pur
     def query_and_log(
         self, question: str, ground_truth: str = None, chat_history: list = None
     ):
+        import mlflow
+
         if mlflow.active_run() is None:
             mlflow.start_run(run_name=f"Eval_{self.model_params['model']}")
         res = self.query(question, chat_history=chat_history)

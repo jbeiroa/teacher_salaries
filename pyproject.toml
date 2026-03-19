@@ -23,7 +23,7 @@ pyarrow = "^23.0.1"
 requests = "^2.31.0"
 # AWS & Storage
 boto3 = "^1.42.65"
-mangum = "^0.21.0"
+apig-wsgi = "^2.16.0"
 # LLM & Agent
 langchain = "^1.2.10"
 langchain-community = "^0.4.1"
@@ -31,10 +31,12 @@ langchain-experimental = "^0.4.1"
 langchain-litellm = "^0.6.1"
 langchain-openai = "^1.1.11"
 langchain-aws = "^1.4.0"
+langchain-ollama = "^1.0.1"
 litellm = "^1.81.16"
 # Utilities
 python-dotenv = "^1.2.1"
 gunicorn = "^21.2.0"
+tabulate = "^0.9.0"
 
 [tool.poetry.group.analytics.dependencies]
 tslearn = "^0.8.0"

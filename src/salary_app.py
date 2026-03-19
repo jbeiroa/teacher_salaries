@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from mangum import Mangum
+from apig_wsgi import make_lambda_handler
 from dash import (
     Dash,
     html,
@@ -424,7 +424,7 @@ app = Dash(
     ],
 )
 server = app.server
-handler = Mangum(server)
+handler = make_lambda_handler(server)
 
 # --- Layout ---
 app.layout = dbc.Container(

@@ -40,8 +40,9 @@ Add these to `Settings > Secrets and variables > Actions`:
    ```
 
 2. **Build the Image**:
+   Use `docker buildx` to ensure the correct architecture and manifest type for AWS Lambda (especially if building on Mac/ARM).
    ```bash
-   docker build -t teacher-salaries-app .
+   docker buildx build --platform linux/amd64 --provenance=false -t teacher-salaries-app .
    ```
 
 3. **Tag and Push**:
