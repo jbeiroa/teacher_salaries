@@ -103,12 +103,13 @@ agent_dfs = {
     "anomalies": df_anomalies
 }
 model_params = {
-    "model": "openai/gpt-4o-mini",
+    "model": os.getenv("AGENT_MODEL", "openai/gpt-4o-mini"),
     "temperature": 0.2,
     "num_retries": 3
 }
+guardrail_model = os.getenv("GUARDRAIL_MODEL", "openai/gpt-4.1-nano")
 journalist_agent = DataJournalistAgent(agent_dfs, model_params=model_params)
-validator = InputValidator(relevance_model="ollama/llama3.2:1b")
+validator = InputValidator(relevance_model=guardrail_model)
 
 # --- Translations ---
 TRANSLATIONS = {

@@ -52,7 +52,7 @@ poetry run pytest
 - `src/salary_data/analytics.py`: ML Pipeline for clustering and anomaly detection.
 - `train_analytics.py`: CLI script to execute the ML training and register models.
 - `reports/`: Narrative research reports consumed by the dashboard.
-- `docs/`: Detailed documentation for the scraper and application.
+- `docs/`: Detailed documentation for the scraper, application, and **[Guardrails Deployment (Bedrock)](docs/guardrails_amazon_bedrock.md)**.
 - `tests/`: Automated unit tests using `pytest`.
 
 ## Tech Stack

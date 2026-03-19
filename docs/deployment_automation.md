@@ -2,6 +2,8 @@
 
 This document explains how to maintain and automate the **Teacher Salaries Dashboard** in a production environment using **AWS Lambda** and **Amazon ECR**.
 
+For security and cost-control configuration of the AI agent, see the **[Guardrails Deployment Guide](guardrails_amazon_bedrock.md)**.
+
 ## 1. Production Strategy: Artifact Bundling
 The application is configured to prioritize loading analytics data (clusters and anomalies) from local files located in the `artifacts/` directory.
 

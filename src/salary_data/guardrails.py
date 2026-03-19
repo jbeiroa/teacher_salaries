@@ -6,7 +6,7 @@ class InputValidator:
     """
     Handles security and relevance filtering for user prompts.
     """
-    def __init__(self, relevance_model: str = "ollama/llama3.2:1b"):
+    def __init__(self, relevance_model: str = "openai/gpt-4o-mini"):
         self.relevance_model = relevance_model
         
         # Patterns for common prompt injection attempts
