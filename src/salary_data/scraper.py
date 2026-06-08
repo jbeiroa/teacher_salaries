@@ -136,19 +136,36 @@ class Scraper:
         month = f"{datetime.today().month:02d}"
         year = f"{datetime.today().year}"[-2:]
         _ipc_url = base_ipc_url + month + "_" + year + ".xls"
-        # Test if the URL has an excel file to download
-        headers = req.head(_ipc_url, timeout=5).headers
-        if (
-            "Content-Type" in headers
-            and "application/vnd.ms-excel" in headers["Content-Type"]
-        ):
-            return _ipc_url
-        else:
-            # If the current month's data is not available, try the previous month
-            prev_month = datetime.today().month - 1 or 12
-            month = f"{prev_month:02d}"
-            _ipc_url = base_ipc_url + month + "_" + year + ".xls"
-            return _ipc_url
+
+        headers_ua = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            )
+        }
+
+        try:
+            # Test if the URL has an excel file to download
+            r = req.head(_ipc_url, headers=headers_ua, timeout=5)
+            if (
+                r.status_code == 200
+                and "Content-Type" in r.headers
+                and "application/vnd.ms-excel" in r.headers["Content-Type"]
+            ):
+                return _ipc_url
+        except Exception as e:
+            print(f"[Scraper] Warning: HEAD request for current month IPC failed: {e}")
+
+        # If the current month's data is not available, try the previous month
+        prev_month = datetime.today().month - 1 or 12
+        month = f"{prev_month:02d}"
+        fallback_year = year
+        if prev_month == 12:
+            prev_year = datetime.today().year - 1
+            fallback_year = f"{prev_year}"[-2:]
+
+        _ipc_url_prev = base_ipc_url + month + "_" + fallback_year + ".xls"
+        return _ipc_url_prev
 
     def _replace_with_underscore(self, match):
         """Helper to sanitize column names.
@@ -229,7 +246,7 @@ class Scraper:
         df = df.T
         df.columns = df.iloc[0]
         df.drop(df.index[0], inplace=True)
-        df.index = pd.to_datetime(df.index)
+        df.index = pd.to_datetime(df.index).to_period("M").to_timestamp()
         new_col_names = df.columns.str.replace(
             r"[\s,y]+", self._replace_with_underscore, regex=True
         )
@@ -254,6 +271,7 @@ class Scraper:
         df = pd.read_csv(BytesIO(r.content))
         df["indice_tiempo"] = pd.to_datetime(df["indice_tiempo"])
         df.set_index("indice_tiempo", inplace=True)
+        df.index = df.index.to_period("M").to_timestamp()
         return df
 
     def calculate_real_salary(self, df_nominal, df_ipc, base_date=None):

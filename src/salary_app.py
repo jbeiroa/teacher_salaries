@@ -964,9 +964,8 @@ def update_dashboard(
     df_real = scraper.calculate_real_salary(df_nom, ipc_series, base_date=base_date)
 
     # Date filtering
-    mask = (df_nom.index >= start_date) & (df_nom.index <= end_date)
-    df_nom_filt = df_nom.loc[mask]
-    df_real_filt = df_real.loc[mask]
+    df_nom_filt = df_nom.loc[start_date:end_date]
+    df_real_filt = df_real.loc[start_date:end_date]
 
     # Variations calculation
     metrics = get_variation_metrics(
@@ -1037,7 +1036,7 @@ def update_dashboard(
 
                 if show_ref:
                     # Normalize Ref Line using Salary Base Value
-                    df_ref_idx = (df_ref_nom.loc[mask] / val_nom_base) * 100
+                    df_ref_idx = (df_ref_nom.loc[start_date:end_date] / val_nom_base) * 100
                     fig_hist.add_trace(
                         go.Scatter(
                             x=df_ref_idx.index,
@@ -1061,7 +1060,7 @@ def update_dashboard(
 
                 if show_ref:
                     # Normalize Real Ref Line using Real Salary Base Value
-                    df_ref_real_idx = (df_ref_real.loc[mask] / val_real_base) * 100
+                    df_ref_real_idx = (df_ref_real.loc[start_date:end_date] / val_real_base) * 100
                     fig_hist.add_trace(
                         go.Scatter(
                             x=df_ref_real_idx.index,
@@ -1087,8 +1086,8 @@ def update_dashboard(
             if show_ref:
                 fig_hist.add_trace(
                     go.Scatter(
-                        x=df_ref_nom.loc[mask].index,
-                        y=df_ref_nom.loc[mask],
+                        x=df_ref_nom.loc[start_date:end_date].index,
+                        y=df_ref_nom.loc[start_date:end_date],
                         name="Ref. (Nominal)",
                         line=dict(color="#e74c3c", dash="dash"),
                     )
@@ -1106,8 +1105,8 @@ def update_dashboard(
             if show_ref:
                 fig_hist.add_trace(
                     go.Scatter(
-                        x=df_ref_real.loc[mask].index,
-                        y=df_ref_real.loc[mask],
+                        x=df_ref_real.loc[start_date:end_date].index,
+                        y=df_ref_real.loc[start_date:end_date],
                         name="Ref. (Real)",
                         line=dict(color="#e74c3c", dash="dash"),
                     )
