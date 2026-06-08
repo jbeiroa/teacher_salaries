@@ -6,12 +6,17 @@ from salary_data.scraper import Scraper
 
 
 def test_scraper_url_ipc_construction():
-    """Verify that URL_IPC is correctly formatted for the current month and year."""
+    """Verify that URL_IPC is correctly formatted for the current or previous month."""
     scraper = Scraper()
-    month = f"{datetime.today().month:02d}"
+    month_curr = f"{datetime.today().month:02d}"
+    prev_month = datetime.today().month - 1 or 12
+    month_prev = f"{prev_month:02d}"
     year = f"{datetime.today().year}"[-2:]
 
-    assert f"sh_ipc_{month}_{year}.xls" in scraper.URL_IPC
+    matched = (f"sh_ipc_{month_curr}_{year}.xls" in scraper.URL_IPC) or (
+        f"sh_ipc_{month_prev}_{year}.xls" in scraper.URL_IPC
+    )
+    assert matched
 
 
 def test_column_sanitization_in_salary_data():
@@ -75,3 +80,30 @@ def test_calculate_variations_frequency_detection():
     assert df_m.loc["2024-01-01", "quarterly"] == pytest.approx(10.0)
     # Interannual should look back 12 months
     assert df_m.loc["2024-01-01", "interannual"] == pytest.approx(10.0)
+
+
+@patch("requests.get")
+def test_dynamic_url_scraping(mock_get):
+    """Verify that dynamic links are parsed and mapped correctly from the HTML page."""
+    # Mock response HTML containing some new 2026 urls
+    html_content = """
+    <html>
+      <body>
+        <p><a href="/sites/default/files/2022/07/2026_1._salario_bruto_mg10_1.xlsx">Descargar Bruto</a></p>
+        <p><a href="https://www.argentina.gob.ar/sites/default/files/2022/07/2026_2._salario_de_bolsillo_mg10_1.xlsx">Descargar Neto</a></p>
+        <p><a href="https://www.argentina.gob.ar/sites/default/files/2022/07/2026_3._sueldo_basico_1.xlsx">Descargar Basico</a></p>
+        <p><a href="https://www.argentina.gob.ar/sites/default/files/2022/07/2026_4._porcentaje_de_componentes_remunerativos_sobre_el_salario_bruto_provincial_del_mg10_1.xlsx">Descargar Remunerativos</a></p>
+        <p><a href="https://www.argentina.gob.ar/sites/default/files/2022/07/2026_5._sumas_adicionales_1.xlsx">Descargar Sumas</a></p>
+      </body>
+    </html>
+    """
+    mock_get.return_value.content = html_content.encode("utf-8")
+    mock_get.return_value.status_code = 200
+
+    scraper = Scraper()
+
+    assert scraper.URL_TESTIGO_BRUTO == "https://www.argentina.gob.ar/sites/default/files/2022/07/2026_1._salario_bruto_mg10_1.xlsx"
+    assert scraper.URL_TESTIGO_NETO == "https://www.argentina.gob.ar/sites/default/files/2022/07/2026_2._salario_de_bolsillo_mg10_1.xlsx"
+    assert scraper.URL_BASICO == "https://www.argentina.gob.ar/sites/default/files/2022/07/2026_3._sueldo_basico_1.xlsx"
+    assert scraper.URL_REMUNERATIVOS == "https://www.argentina.gob.ar/sites/default/files/2022/07/2026_4._porcentaje_de_componentes_remunerativos_sobre_el_salario_bruto_provincial_del_mg10_1.xlsx"
+    assert scraper.URL_SUMAS_ADICIONALES == "https://www.argentina.gob.ar/sites/default/files/2022/07/2026_5._sumas_adicionales_1.xlsx"

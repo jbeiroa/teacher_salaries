@@ -11,6 +11,8 @@ import numpy as np
 import requests as req
 from datetime import datetime
 from io import BytesIO
+from urllib.parse import urljoin
+from bs4 import BeautifulSoup
 
 
 class Scraper:
@@ -31,17 +33,96 @@ class Scraper:
 
     def __init__(self):
         """Initializes the Scraper with default URLs and constructs the IPC URL."""
-        self.URL_TESTIGO_BRUTO = "https://www.argentina.gob.ar/sites/default/files/2022/07/1._salario_bruto_mg10_1225.xlsx"
-        self.URL_TESTIGO_NETO = "https://www.argentina.gob.ar/sites/default/files/2022/07/2._salario_de_bolsillo_mg10_1225.xlsx"
-        self.URL_BASICO = "https://www.argentina.gob.ar/sites/default/files/2022/07/3._sueldo_basico_1225.xlsx"
-        self.URL_REMUNERATIVOS = "https://www.argentina.gob.ar/sites/default/files/2022/07/4._porcentaje_de_componentes_remunerativos_sobre_el_salario_bruto_provincial_del_mg10_1225.xlsx"
-        self.URL_SUMAS_ADICIONALES = "https://www.argentina.gob.ar/sites/default/files/2022/07/5._sumas_adicionales12_25.xlsx"
+        # Fetch dynamic URLs first, falling back to defaults if page cannot be parsed
+        self._fetch_dynamic_urls()
 
         # IPC URL construction
         self.URL_IPC = self._build_ipc_url()
 
         # CBA/CBT URL from datos.gob.ar
         self.URL_CBA_CBT = "https://infra.datos.gob.ar/catalog/sspm/dataset/150/distribution/150.1/download/valores-canasta-basica-alimentos-canasta-basica-total-mensual-2016.csv"
+
+    def _fetch_dynamic_urls(self):
+        """Fetches the teacher salary series page and dynamically extracts Excel links.
+
+        Falls back to hardcoded default URLs on request failure or parsing failure.
+        """
+        # Hardcoded default/fallback URLs
+        fallback_urls = {
+            "bruto": "https://www.argentina.gob.ar/sites/default/files/2022/07/1._salario_bruto_mg10_1225.xlsx",
+            "neto": "https://www.argentina.gob.ar/sites/default/files/2022/07/2._salario_de_bolsillo_mg10_1225.xlsx",
+            "basico": "https://www.argentina.gob.ar/sites/default/files/2022/07/3._sueldo_basico_1225.xlsx",
+            "remunerativos": "https://www.argentina.gob.ar/sites/default/files/2022/07/4._porcentaje_de_componentes_remunerativos_sobre_el_salario_bruto_provincial_del_mg10_1225.xlsx",
+            "sumas_adicionales": "https://www.argentina.gob.ar/sites/default/files/2022/07/5._sumas_adicionales12_25.xlsx",
+        }
+
+        self.URL_TESTIGO_BRUTO = fallback_urls["bruto"]
+        self.URL_TESTIGO_NETO = fallback_urls["neto"]
+        self.URL_BASICO = fallback_urls["basico"]
+        self.URL_REMUNERATIVOS = fallback_urls["remunerativos"]
+        self.URL_SUMAS_ADICIONALES = fallback_urls["sumas_adicionales"]
+
+        base_page_url = "https://www.argentina.gob.ar/capital-humano/educacion/informacion-y-evaluacion-educativa/series-salario-docente"
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            )
+        }
+        try:
+            r = req.get(base_page_url, headers=headers, timeout=15)
+            r.raise_for_status()
+            soup = BeautifulSoup(r.content, "html.parser")
+
+            # Find all links containing .xlsx
+            xlsx_links = []
+            for a in soup.find_all("a", href=True):
+                href = a["href"].strip()
+                if ".xlsx" in href.lower():
+                    abs_url = urljoin(base_page_url, href)
+                    xlsx_links.append(abs_url)
+
+            # Map the URLs by keyword/numbers if possible
+            matched_urls = {}
+            for link in xlsx_links:
+                filename = link.split("/")[-1].lower()
+                if "1._salario_bruto" in filename or ("salario_bruto" in filename and "1" in filename) or "bruto" in filename:
+                    if "bruto" not in matched_urls:
+                        matched_urls["bruto"] = link
+                elif "2._salario_de_bolsillo" in filename or "2._sueldo_de_bolsillo" in filename or ("bolsillo" in filename and "2" in filename) or "bolsillo" in filename:
+                    if "neto" not in matched_urls:
+                        matched_urls["neto"] = link
+                elif "3._sueldo_basico" in filename or ("basico" in filename and "3" in filename) or "basico" in filename:
+                    if "basico" not in matched_urls:
+                        matched_urls["basico"] = link
+                elif "4._porcentaje" in filename or "remunerativos" in filename:
+                    if "remunerativos" not in matched_urls:
+                        matched_urls["remunerativos"] = link
+                elif "5._sumas_adicionales" in filename or "adicionales" in filename:
+                    if "sumas_adicionales" not in matched_urls:
+                        matched_urls["sumas_adicionales"] = link
+
+            # Positional fallback if keyword parsing is incomplete but we have at least 5 links
+            if len(matched_urls) < 5 and len(xlsx_links) >= 5:
+                keys = ["bruto", "neto", "basico", "remunerativos", "sumas_adicionales"]
+                for i, k in enumerate(keys):
+                    if k not in matched_urls:
+                        matched_urls[k] = xlsx_links[i]
+
+            if "bruto" in matched_urls:
+                self.URL_TESTIGO_BRUTO = matched_urls["bruto"]
+            if "neto" in matched_urls:
+                self.URL_TESTIGO_NETO = matched_urls["neto"]
+            if "basico" in matched_urls:
+                self.URL_BASICO = matched_urls["basico"]
+            if "remunerativos" in matched_urls:
+                self.URL_REMUNERATIVOS = matched_urls["remunerativos"]
+            if "sumas_adicionales" in matched_urls:
+                self.URL_SUMAS_ADICIONALES = matched_urls["sumas_adicionales"]
+
+            print("[Scraper] Successfully loaded dynamic URLs from CGECSE series page.")
+        except Exception as e:
+            print(f"[Scraper] Warning: failed to fetch dynamic links, using fallbacks: {e}")
 
     def _build_ipc_url(self):
         """Constructs the URL for the INDEC IPC data based on the current date.
