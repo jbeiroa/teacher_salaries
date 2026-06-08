@@ -246,7 +246,7 @@ class Scraper:
         df = df.T
         df.columns = df.iloc[0]
         df.drop(df.index[0], inplace=True)
-        df.index = pd.to_datetime(df.index)
+        df.index = pd.to_datetime(df.index).to_period("M").to_timestamp()
         new_col_names = df.columns.str.replace(
             r"[\s,y]+", self._replace_with_underscore, regex=True
         )
@@ -271,6 +271,7 @@ class Scraper:
         df = pd.read_csv(BytesIO(r.content))
         df["indice_tiempo"] = pd.to_datetime(df["indice_tiempo"])
         df.set_index("indice_tiempo", inplace=True)
+        df.index = df.index.to_period("M").to_timestamp()
         return df
 
     def calculate_real_salary(self, df_nominal, df_ipc, base_date=None):
